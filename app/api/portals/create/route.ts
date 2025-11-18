@@ -1,66 +1,71 @@
 import { NextResponse } from 'next/server';
-import { getServiceSupabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 function generateUniqueLink(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 22; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { customer, tradeShowName, items } = body;
-    
-    if (!customer.name || items.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Customer name and at least one item required'
-      }, { status: 400 });
-    }
-    
-    const supabase = getServiceSupabase();
+
+    // Generate unique link
     const uniqueLink = generateUniqueLink();
-    
+
+    // Create portal
     const { data: portal, error: portalError } = await supabase
       .from('portals')
       .insert({
         customer_name: customer.name,
-        customer_email: customer.email || null,
-        customer_phone: customer.phone || null,
-        trade_show_name: tradeShowName || null,
-        unique_link: uniqueLink,
-        status: 'pending'
+        customer_email: customer.email,
+        customer_phone: customer.phone,
+        trade_show_name: tradeShowName,
+        status: 'pending',
+        unique_link: uniqueLink
       })
       .select()
       .single();
-    
+
     if (portalError) throw portalError;
-    
+
+    // Create portal items - image_url is now passed from frontend
     const portalItems = items.map((item: any) => ({
       portal_id: portal.id,
       product_id: item.product_id,
       style_number: item.style_number,
-      description: `${item.attr_2} - ${item.size}`,
-      price: parseFloat(item.price),
+      attr_2: item.attr_2,
+      size: item.size,
       quantity: item.quantity,
-      expected_delivery_date: item.deliveryDate || null,
-      notes: item.notes || null
+      price: item.price,
+      delivery_date: item.deliveryDate || null,
+      notes: item.notes || null,
+      image_url: item.image_url || null
     }));
-    
+
     const { error: itemsError } = await supabase
       .from('portal_items')
       .insert(portalItems);
-    
+
     if (itemsError) throw itemsError;
-    
+
     return NextResponse.json({
       success: true,
       portal: {
         id: portal.id,
-        unique_link: uniqueLink,
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/portal/${uniqueLink}`
+        url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/portal/${uniqueLink}`
       }
     });
-    
+
   } catch (error) {
     console.error('Error creating portal:', error);
     return NextResponse.json({

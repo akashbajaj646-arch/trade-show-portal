@@ -1,403 +1,383 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 
-export default function CustomerPortal() {
+interface PortalItem {
+  id: string;
+  style_number: string;
+  attr_2: string;
+  size: string;
+  quantity: number;
+  price: string;
+  delivery_date: string;
+  notes: string;
+  image_url: string;
+}
+
+interface Portal {
+  id: string;
+  customer_name: string;
+  trade_show_name: string;
+  status: string;
+  items: PortalItem[];
+  files: Array<{ url: string; filename: string }>;
+}
+
+export default function PortalView() {
   const params = useParams();
-  const link = params.link;
-  
-  const [portal, setPortal] = useState(null);
-  const [items, setItems] = useState([]);
-  const [attachments, setAttachments] = useState([]);
+  const [portal, setPortal] = useState<Portal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!link) return;
+    if (params.link) {
+      fetchPortal(params.link as string);
+    }
+  }, [params.link]);
+
+  async function fetchPortal(uniqueLink: string) {
+    try {
+      const response = await fetch(`/api/portals/${uniqueLink}`);
+      const data = await response.json();
+      if (data.success) {
+        setPortal(data.portal);
+      }
+    } catch (error) {
+      console.error('Error fetching portal:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmOrder() {
+    if (!params.link) return;
     
-    fetch(`/api/portals/${link}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setPortal(data.portal);
-          setItems(data.items);
-          setAttachments(data.attachments || []);
-        }
-        setLoading(false);
+    setConfirming(true);
+    try {
+      const response = await fetch(`/api/portals/${params.link}/confirm`, {
+        method: 'POST'
       });
-  }, [link]);
+      const data = await response.json();
+      if (data.success && portal) {
+        setPortal({ ...portal, status: 'confirmed' });
+      }
+    } catch (error) {
+      console.error('Error confirming order:', error);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  function openImageModal(imageUrl: string) {
+    setSelectedImage(imageUrl);
+  }
+
+  function closeImageModal() {
+    setSelectedImage(null);
+  }
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', color: 'white' }}>
-          <div style={{ fontSize: '64px', marginBottom: '20px' }}>📦</div>
-          <div style={{ fontSize: '24px', fontWeight: '600' }}>Loading your order...</div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+          <div style={{ fontSize: '20px' }}>Loading your portal...</div>
         </div>
       </div>
     );
   }
 
-  const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-  return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-      {/* Header */}
-      <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', padding: '30px 20px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <div style={{ maxWidth: '1000px', margin: '0 auto', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '42px', fontWeight: '700', margin: '0 0 12px 0', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Advance Apparels
-          </h1>
-          <div style={{ fontSize: '20px', color: '#374151', marginBottom: '8px' }}>
-            Order for: <strong style={{ color: '#111827' }}>{portal?.customer_name}</strong>
-          </div>
-          {portal?.trade_show_name && (
-            <div style={{ fontSize: '15px', color: '#6b7280', background: 'rgba(102, 126, 234, 0.1)', padding: '6px 16px', borderRadius: '20px', display: 'inline-block' }}>
-              📍 {portal.trade_show_name}
-            </div>
-          )}
+  if (!portal) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'white' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+          <div style={{ fontSize: '20px' }}>Portal not found</div>
         </div>
       </div>
+    );
+  }
 
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '40px 20px' }}>
+  const items = portal.items || [];
+  const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '40px 20px' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         
+        {/* Header */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px', color: '#111827' }}>{portal.customer_name}</h1>
+              {portal.trade_show_name && (
+                <p style={{ fontSize: '16px', color: '#6b7280' }}>{portal.trade_show_name}</p>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ padding: '8px 16px', background: portal.status === 'confirmed' ? '#d1fae5' : '#fef3c7', color: portal.status === 'confirmed' ? '#065f46' : '#92400e', borderRadius: '20px', fontSize: '14px', fontWeight: '600' }}>
+                {portal.status === 'confirmed' ? '✓ Confirmed' : '⏳ Pending'}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Order Items */}
-        <div style={{ marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '28px', fontWeight: '700', color: 'white', marginBottom: '20px', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-            📦 Order Details
-          </h2>
-          
-          {items.map((item, index) => (
-            <div key={index} style={{ background: 'white', borderRadius: '16px', padding: '28px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-              <div style={{ display: 'flex', gap: '28px', marginBottom: '24px', flexWrap: 'wrap' }}>
-                
-                {item.product_images && item.product_images.length > 0 ? (
-                  <div 
-                    onClick={() => setSelectedImage(item.product_images[0].img)}
-                    style={{ 
-                      flexShrink: 0,
-                      cursor: 'pointer',
-                      position: 'relative',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    <img 
-                      src={item.product_images[0].img} 
-                      alt={item.style_number}
+        {items.length === 0 ? (
+          <div style={{ background: 'white', borderRadius: '16px', padding: '60px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div style={{ fontSize: '64px', marginBottom: '16px' }}>📦</div>
+            <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>No Items Yet</h2>
+            <p style={{ color: '#6b7280' }}>This portal doesn't have any products added yet.</p>
+          </div>
+        ) : (
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '24px', color: '#111827' }}>Order Details</h2>
+            
+            {items.map((item, index) => (
+              <div key={index} style={{ padding: '20px', background: '#f9fafb', borderRadius: '12px', marginBottom: '16px', border: '2px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                  {/* Product Image */}
+                  {item.image_url ? (
+                    <div 
+                      onClick={() => openImageModal(item.image_url)}
                       style={{ 
-                        width: '180px', 
-                        height: '180px', 
-                        objectFit: 'cover',
-                        transition: 'transform 0.3s'
+                        width: '120px', 
+                        height: '120px', 
+                        flexShrink: 0,
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'transform 0.2s'
                       }}
                       onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                       onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    />
-                    <div style={{ 
-                      position: 'absolute', 
-                      bottom: '0', 
-                      left: '0',
-                      right: '0',
-                      background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)', 
-                      color: 'white', 
-                      padding: '8px 12px', 
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}>
-                      🔍 Click to zoom
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ 
-                    width: '180px', 
-                    height: '180px', 
-                    background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', 
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    fontSize: '14px',
-                    color: '#9ca3af',
-                    fontWeight: '600'
-                  }}>
-                    No Image
-                  </div>
-                )}
-
-                <div style={{ flex: 1, minWidth: '300px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase' }}>
-                        Product
-                      </div>
-                      <h3 style={{ fontSize: '26px', fontWeight: '700', marginBottom: '8px', color: '#111827' }}>
-                        Style {item.style_number}
-                      </h3>
-                      <p style={{ fontSize: '16px', color: '#6b7280', margin: 0 }}>
-                        {item.description}
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase' }}>
-                        Unit Price
-                      </div>
-                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#667eea' }}>
-                        ${parseFloat(item.price).toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{ 
-                paddingTop: '24px', 
-                borderTop: '2px solid #f3f4f6',
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-                gap: '24px' 
-              }}>
-                <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', padding: '20px', borderRadius: '12px' }}>
-                  <div style={{ fontSize: '12px', color: '#78350f', marginBottom: '8px', fontWeight: '700', textTransform: 'uppercase' }}>
-                    Quantity
-                  </div>
-                  <div style={{ fontSize: '28px', fontWeight: '700', color: '#92400e' }}>
-                    {item.quantity} units
-                  </div>
-                </div>
-                <div style={{ background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', padding: '20px', borderRadius: '12px' }}>
-                  <div style={{ fontSize: '12px', color: '#065f46', marginBottom: '8px', fontWeight: '700', textTransform: 'uppercase' }}>
-                    Subtotal
-                  </div>
-                  <div style={{ fontSize: '28px', fontWeight: '700', color: '#047857' }}>
-                    ${(item.price * item.quantity).toFixed(2)}
-                  </div>
-                </div>
-                <div style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', padding: '20px', borderRadius: '12px' }}>
-                  <div style={{ fontSize: '12px', color: '#1e3a8a', marginBottom: '8px', fontWeight: '700', textTransform: 'uppercase' }}>
-                    Expected Delivery
-                  </div>
-                  <div style={{ fontSize: '20px', fontWeight: '700', color: '#1e40af' }}>
-                    {item.expected_delivery_date ? new Date(item.expected_delivery_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Total */}
-        <div style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '32px', 
-          marginBottom: '30px',
-          boxShadow: '0 8px 24px rgba(102, 126, 234, 0.3)',
-          border: '3px solid #667eea'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-            <div>
-              <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '8px', fontWeight: '700', textTransform: 'uppercase' }}>
-                Total Order Value
-              </div>
-              <div style={{ fontSize: '48px', fontWeight: '700', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                ${totalValue.toFixed(2)}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '4px' }}>
-                {items.length} Product{items.length !== 1 ? 's' : ''}
-              </div>
-              <div style={{ fontSize: '14px', color: '#9ca3af' }}>
-                {items.reduce((sum, item) => sum + item.quantity, 0)} Total Units
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Attachments */}
-        {attachments.length > 0 && (
-          <div style={{ 
-            background: 'white', 
-            borderRadius: '16px', 
-            padding: '32px', 
-            marginBottom: '30px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-          }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px', color: '#111827', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              📎 Attachments
-              <span style={{ 
-                fontSize: '14px', 
-                background: '#667eea', 
-                color: 'white', 
-                padding: '4px 12px', 
-                borderRadius: '12px',
-                fontWeight: '600'
-              }}>
-                {attachments.length}
-              </span>
-            </h2>
-            <p style={{ color: '#6b7280', marginBottom: '24px', fontSize: '15px' }}>
-              Photos and documents from the trade show
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
-              {attachments.map((attachment) => (
-                <div key={attachment.id} style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-                  }}
-                >
-                  {attachment.file_type === 'photo' || attachment.file_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                    <div style={{ cursor: 'pointer' }} onClick={() => setSelectedImage(attachment.file_url)}>
+                    >
                       <img 
-                        src={attachment.file_url} 
-                        alt={attachment.file_name}
+                        src={item.image_url} 
+                        alt={item.style_number}
                         style={{ 
                           width: '100%', 
-                          height: '180px', 
-                          objectFit: 'cover'
-                        }}
+                          height: '100%', 
+                          objectFit: 'cover', 
+                          borderRadius: '8px',
+                          border: '2px solid #e5e7eb'
+                        }} 
                       />
-                      <div style={{ padding: '16px', background: 'white' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111827' }}>
-                          {attachment.file_name}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                          {(attachment.file_size / 1024).toFixed(1)} KB • Click to enlarge
-                        </div>
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        right: '8px',
+                        background: 'rgba(0,0,0,0.7)',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}>
+                        🔍 Click to zoom
                       </div>
                     </div>
                   ) : (
-                    <a href={attachment.file_url} target="_blank" style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: 'white' }}>
-                      <div style={{ padding: '32px', textAlign: 'center', background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)' }}>
-                        <div style={{ fontSize: '56px', marginBottom: '12px' }}>📄</div>
-                      </div>
-                      <div style={{ padding: '16px' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111827' }}>
-                          {attachment.file_name}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#667eea', fontWeight: '600' }}>
-                          Click to download →
-                        </div>
-                      </div>
-                    </a>
+                    <div style={{ 
+                      width: '120px', 
+                      height: '120px', 
+                      background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', 
+                      borderRadius: '8px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      fontSize: '48px',
+                      flexShrink: 0
+                    }}>
+                      📦
+                    </div>
                   )}
+
+                  {/* Product Details */}
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: '#111827' }}>
+                      Style: {item.style_number}
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>COLOR</div>
+                        <div style={{ fontSize: '15px', color: '#111827' }}>{item.attr_2}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>SIZE</div>
+                        <div style={{ fontSize: '15px', color: '#111827' }}>{item.size}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>QUANTITY</div>
+                        <div style={{ fontSize: '15px', color: '#111827', fontWeight: '700' }}>{item.quantity}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>PRICE</div>
+                        <div style={{ fontSize: '15px', color: '#667eea', fontWeight: '700' }}>${item.price}</div>
+                      </div>
+                    </div>
+                    {item.delivery_date && (
+                      <div style={{ marginTop: '8px' }}>
+                        <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Expected Delivery: </span>
+                        <span style={{ fontSize: '14px', color: '#111827' }}>{new Date(item.delivery_date).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {item.notes && (
+                      <div style={{ marginTop: '8px', padding: '8px', background: '#fef3c7', borderRadius: '6px', fontSize: '13px', color: '#92400e' }}>
+                        📝 {item.notes}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '8px', border: '2px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Line Total</div>
+                      <div style={{ fontSize: '22px', fontWeight: '700', color: '#667eea' }}>
+                        ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            ))}
+
+            {/* Total */}
+            <div style={{ marginTop: '24px', padding: '24px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ color: 'white', fontSize: '20px', fontWeight: '600' }}>Order Total</div>
+              <div style={{ color: 'white', fontSize: '32px', fontWeight: '700' }}>${totalAmount.toFixed(2)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Uploaded Files */}
+        {portal.files && portal.files.length > 0 && (
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '16px', color: '#111827' }}>📎 Attached Files</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+              {portal.files.map((file, index) => (
+                <a 
+                  key={index} 
+                  href={file.url} 
+                  target="_blank" 
+                  style={{ 
+                    padding: '16px', 
+                    background: '#f9fafb', 
+                    borderRadius: '8px', 
+                    border: '2px solid #e5e7eb',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.borderColor = '#667eea';
+                    e.currentTarget.style.background = '#f3f4f6';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.background = '#f9fafb';
+                  }}
+                >
+                  <div style={{ fontSize: '24px' }}>📄</div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {file.filename}
+                    </div>
+                  </div>
+                </a>
               ))}
             </div>
           </div>
         )}
 
-        {/* Next Steps */}
-        <div style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '32px', 
-          marginBottom: '30px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-        }}>
-          <h3 style={{ fontSize: '22px', marginBottom: '16px', color: '#111827', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '28px' }}>📋</span> Next Steps
-          </h3>
-          <p style={{ color: '#4b5563', lineHeight: '1.8', margin: 0, fontSize: '16px' }}>
-            Please review your order details above carefully. If you need to make any changes or have questions, 
-            contact us at your earliest convenience. We will reach out to arrange payment and finalize delivery details.
-          </p>
-        </div>
+        {/* Confirm Button */}
+        {portal.status === 'pending' && items.length > 0 && (
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <p style={{ fontSize: '16px', color: '#6b7280', marginBottom: '24px' }}>
+              Please review your order details above and confirm when ready.
+            </p>
+            <button 
+              onClick={confirmOrder}
+              disabled={confirming}
+              style={{ 
+                padding: '16px 48px', 
+                background: confirming ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '10px', 
+                fontSize: '18px', 
+                fontWeight: '700', 
+                cursor: confirming ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+              }}
+            >
+              {confirming ? '⏳ Confirming...' : '✓ Confirm Order'}
+            </button>
+          </div>
+        )}
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.9)', fontSize: '14px', padding: '30px 0' }}>
-          <div style={{ fontSize: '24px', fontWeight: '700', marginBottom: '8px' }}>Advance Apparels</div>
-          <div style={{ opacity: 0.8 }}>Trade Show Order Portal</div>
-          <div style={{ marginTop: '12px', opacity: 0.7 }}>Questions? Contact us for assistance.</div>
-        </div>
+        {portal.status === 'confirmed' && (
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div style={{ fontSize: '64px', marginBottom: '16px' }}>✓</div>
+            <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#10b981', marginBottom: '8px' }}>Order Confirmed!</h3>
+            <p style={{ fontSize: '16px', color: '#6b7280' }}>Thank you for confirming your order. We'll be in touch soon!</p>
+          </div>
+        )}
       </div>
 
-      {/* Image Lightbox */}
+      {/* Image Modal */}
       {selectedImage && (
         <div 
-          onClick={() => setSelectedImage(null)}
+          onClick={closeImageModal}
           style={{ 
             position: 'fixed', 
             top: 0, 
             left: 0, 
             right: 0, 
             bottom: 0, 
-            background: 'rgba(0,0,0,0.95)', 
+            background: 'rgba(0,0,0,0.9)', 
             display: 'flex', 
             alignItems: 'center', 
-            justifyContent: 'center',
-            zIndex: 9999,
-            cursor: 'pointer',
-            padding: '40px',
-            animation: 'fadeIn 0.2s'
+            justifyContent: 'center', 
+            zIndex: 1000,
+            padding: '20px',
+            cursor: 'zoom-out'
           }}
         >
-          <div style={{ position: 'relative', maxWidth: '95%', maxHeight: '95%' }}>
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
             <button
-              onClick={() => setSelectedImage(null)}
+              onClick={closeImageModal}
               style={{
                 position: 'absolute',
-                top: '-50px',
+                top: '-40px',
                 right: '0',
                 background: 'white',
                 border: 'none',
                 borderRadius: '50%',
-                width: '48px',
-                height: '48px',
-                fontSize: '28px',
+                width: '40px',
+                height: '40px',
+                fontSize: '24px',
                 cursor: 'pointer',
-                fontWeight: 'bold',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                transition: 'transform 0.2s'
+                fontWeight: '700',
+                color: '#111827'
               }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-              ×
+              ✕
             </button>
             <img 
               src={selectedImage} 
-              alt="Full size"
-              onClick={(e) => e.stopPropagation()}
+              alt="Product"
               style={{ 
                 maxWidth: '100%', 
                 maxHeight: '90vh', 
                 objectFit: 'contain',
-                borderRadius: '12px',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.7)'
+                borderRadius: '8px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
               }}
+              onClick={(e) => e.stopPropagation()}
             />
-            <div style={{
-              position: 'absolute',
-              bottom: '-50px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              color: 'white',
-              fontSize: '15px',
-              background: 'rgba(0,0,0,0.8)',
-              padding: '10px 20px',
-              borderRadius: '24px',
-              fontWeight: '600',
-              whiteSpace: 'nowrap'
-            }}>
-              Click anywhere to close
-            </div>
           </div>
         </div>
       )}

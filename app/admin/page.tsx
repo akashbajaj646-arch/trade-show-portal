@@ -6,10 +6,12 @@ interface Portal {
   id: string;
   customer_name: string;
   customer_email: string;
+  customer_phone: string;
   trade_show_name: string;
   created_at: string;
   status: string;
   url: string;
+  unique_link: string;
 }
 
 export default function AdminDashboard() {
@@ -34,6 +36,56 @@ export default function AdminDashboard() {
     }
   }
 
+  async function updateStatus(portalId: string, newStatus: string) {
+    try {
+      const response = await fetch('/api/admin/portals/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portalId, status: newStatus })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setPortals(portals.map(p => 
+          p.id === portalId ? { ...p, status: newStatus } : p
+        ));
+        alert('✓ Status updated successfully');
+      } else {
+        alert('Failed to update status: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Error updating status');
+    }
+  }
+
+  async function deletePortal(portalId: string) {
+    if (!confirm('Are you sure you want to delete this portal? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/portals/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portalId })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setPortals(portals.filter(p => p.id !== portalId));
+        alert('✓ Portal deleted successfully');
+      } else {
+        alert('Failed to delete portal: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error deleting portal:', error);
+      alert('Error deleting portal');
+    }
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -48,7 +100,7 @@ export default function AdminDashboard() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#111827' }}>Trade Show Portal Manager</h1>
           <a href="/admin/create" style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: '10px', textDecoration: 'none', fontWeight: '600', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }}>
             ✨ Create New Portal
@@ -56,7 +108,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px' }}>
         {portals.length === 0 ? (
           <div style={{ background: 'white', borderRadius: '16px', padding: '60px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
             <div style={{ fontSize: '64px', marginBottom: '24px' }}>📋</div>
@@ -90,6 +142,9 @@ export default function AdminDashboard() {
                         {portal.customer_email && (
                           <div style={{ color: '#6b7280', fontSize: '13px', marginTop: '4px' }}>{portal.customer_email}</div>
                         )}
+                        {portal.customer_phone && (
+                          <div style={{ color: '#6b7280', fontSize: '13px' }}>{portal.customer_phone}</div>
+                        )}
                       </td>
                       <td style={{ padding: '20px 24px', color: '#374151', fontSize: '14px' }}>
                         {portal.trade_show_name || '-'}
@@ -98,14 +153,79 @@ export default function AdminDashboard() {
                         {new Date(portal.created_at).toLocaleDateString()}
                       </td>
                       <td style={{ padding: '20px 24px' }}>
-                        <span style={{ padding: '6px 12px', background: portal.status === 'pending' ? '#fef3c7' : '#d1fae5', color: portal.status === 'pending' ? '#92400e' : '#065f46', borderRadius: '20px', fontSize: '13px', fontWeight: '600' }}>
-                          {portal.status}
-                        </span>
+                        <select 
+                          value={portal.status}
+                          onChange={(e) => updateStatus(portal.id, e.target.value)}
+                          style={{ 
+                            padding: '6px 12px', 
+                            background: portal.status === 'pending' ? '#fef3c7' : portal.status === 'confirmed' ? '#d1fae5' : '#fee2e2',
+                            color: portal.status === 'pending' ? '#92400e' : portal.status === 'confirmed' ? '#065f46' : '#991b1b',
+                            border: 'none',
+                            borderRadius: '6px', 
+                            fontSize: '13px', 
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="pending">⏳ Pending</option>
+                          <option value="confirmed">✓ Confirmed</option>
+                          <option value="cancelled">✕ Cancelled</option>
+                        </select>
                       </td>
                       <td style={{ padding: '20px 24px' }}>
-                        <a href={portal.url} target="_blank" style={{ padding: '8px 16px', background: '#667eea', color: 'white', borderRadius: '6px', textDecoration: 'none', fontSize: '14px', fontWeight: '600', display: 'inline-block' }}>
-                          View Portal
-                        </a>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <a 
+                            href={portal.url} 
+                            target="_blank" 
+                            style={{ 
+                              padding: '8px 16px', 
+                              background: '#667eea', 
+                              color: 'white', 
+                              borderRadius: '6px', 
+                              textDecoration: 'none', 
+                              fontSize: '14px', 
+                              fontWeight: '600',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            👁️ View
+                          </a>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(portal.url);
+                              alert('✓ Link copied!');
+                            }}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            📋 Copy
+                          </button>
+                          <button
+                            onClick={() => deletePortal(portal.id)}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#ef4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
