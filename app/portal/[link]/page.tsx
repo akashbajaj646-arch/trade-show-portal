@@ -24,6 +24,20 @@ interface Portal {
   files: Array<{ url: string; filename: string }>;
 }
 
+interface ProductGroup {
+  style_number: string;
+  image_url: string;
+  price: string;
+  delivery_date: string;
+  notes: string;
+  items: PortalItem[];
+  colors: string[];
+  sizes: string[];
+  matrix: Record<string, PortalItem>;
+  totalQuantity: number;
+  totalAmount: number;
+}
+
 export default function PortalView() {
   const params = useParams();
   const [portal, setPortal] = useState<Portal | null>(null);
@@ -101,7 +115,46 @@ export default function PortalView() {
   }
 
   const items = portal.items || [];
-  const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
+  
+  // Group items by product (style_number)
+  const productGroups: Record<string, ProductGroup> = {};
+  
+  items.forEach(item => {
+    if (!productGroups[item.style_number]) {
+      productGroups[item.style_number] = {
+        style_number: item.style_number,
+        image_url: item.image_url,
+        price: item.price,
+        delivery_date: item.delivery_date,
+        notes: item.notes,
+        items: [],
+        colors: [],
+        sizes: [],
+        matrix: {},
+        totalQuantity: 0,
+        totalAmount: 0
+      };
+    }
+    
+    const group = productGroups[item.style_number];
+    group.items.push(item);
+    
+    if (!group.colors.includes(item.attr_2)) {
+      group.colors.push(item.attr_2);
+    }
+    if (!group.sizes.includes(item.size)) {
+      group.sizes.push(item.size);
+    }
+    
+    const key = `${item.attr_2}|${item.size}`;
+    group.matrix[key] = item;
+    
+    group.totalQuantity += item.quantity;
+    group.totalAmount += parseFloat(item.price) * item.quantity;
+  });
+  
+  const products = Object.values(productGroups);
+  const grandTotal = products.reduce((sum, p) => sum + p.totalAmount, 0);
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '40px 20px' }}>
@@ -135,13 +188,15 @@ export default function PortalView() {
           <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
             <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '24px', color: '#111827' }}>Order Details</h2>
             
-            {items.map((item, index) => (
-              <div key={index} style={{ padding: '20px', background: '#f9fafb', borderRadius: '12px', marginBottom: '16px', border: '2px solid #e5e7eb' }}>
-                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {products.map((product, idx) => (
+              <div key={idx} style={{ padding: '24px', background: '#f9fafb', borderRadius: '12px', marginBottom: '20px', border: '2px solid #e5e7eb' }}>
+                
+                {/* Product Header */}
+                <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
                   {/* Product Image */}
-                  {item.image_url ? (
+                  {product.image_url ? (
                     <div 
-                      onClick={() => openImageModal(item.image_url)}
+                      onClick={() => openImageModal(product.image_url)}
                       style={{ 
                         width: '120px', 
                         height: '120px', 
@@ -154,8 +209,8 @@ export default function PortalView() {
                       onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                     >
                       <img 
-                        src={item.image_url} 
-                        alt={item.style_number}
+                        src={product.image_url} 
+                        alt={product.style_number}
                         style={{ 
                           width: '100%', 
                           height: '100%', 
@@ -172,10 +227,10 @@ export default function PortalView() {
                         color: 'white',
                         padding: '4px 8px',
                         borderRadius: '4px',
-                        fontSize: '12px',
+                        fontSize: '11px',
                         fontWeight: '600'
                       }}>
-                        🔍 Click to zoom
+                        🔍 Click
                       </div>
                     </div>
                   ) : (
@@ -194,55 +249,93 @@ export default function PortalView() {
                     </div>
                   )}
 
-                  {/* Product Details */}
-                  <div style={{ flex: 1, minWidth: '250px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: '#111827' }}>
-                      Style: {item.style_number}
+                  {/* Product Info */}
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: '#111827' }}>
+                      Style: {product.style_number}
                     </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>COLOR</div>
-                        <div style={{ fontSize: '15px', color: '#111827' }}>{item.attr_2}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>SIZE</div>
-                        <div style={{ fontSize: '15px', color: '#111827' }}>{item.size}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>QUANTITY</div>
-                        <div style={{ fontSize: '15px', color: '#111827', fontWeight: '700' }}>{item.quantity}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>PRICE</div>
-                        <div style={{ fontSize: '15px', color: '#667eea', fontWeight: '700' }}>${item.price}</div>
-                      </div>
+                    <div style={{ fontSize: '16px', color: '#667eea', fontWeight: '700', marginBottom: '8px' }}>
+                      ${product.price}/unit
                     </div>
-                    {item.delivery_date && (
-                      <div style={{ marginTop: '8px' }}>
-                        <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Expected Delivery: </span>
-                        <span style={{ fontSize: '14px', color: '#111827' }}>{new Date(item.delivery_date).toLocaleDateString()}</span>
+                    {product.delivery_date && (
+                      <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: '600' }}>Expected Delivery:</span> {new Date(product.delivery_date).toLocaleDateString()}
                       </div>
                     )}
-                    {item.notes && (
-                      <div style={{ marginTop: '8px', padding: '8px', background: '#fef3c7', borderRadius: '6px', fontSize: '13px', color: '#92400e' }}>
-                        📝 {item.notes}
-                      </div>
-                    )}
-                    <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '8px', border: '2px solid #e5e7eb' }}>
-                      <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>Line Total</div>
-                      <div style={{ fontSize: '22px', fontWeight: '700', color: '#667eea' }}>
-                        ${(parseFloat(item.price) * item.quantity).toFixed(2)}
-                      </div>
+                    <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                      <span style={{ fontWeight: '600' }}>Total Units:</span> {product.totalQuantity}
+                    </div>
+                  </div>
+
+                  {/* Product Total */}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Product Total</div>
+                    <div style={{ fontSize: '24px', fontWeight: '700', color: '#667eea' }}>
+                      ${product.totalAmount.toFixed(2)}
                     </div>
                   </div>
                 </div>
+
+                {/* Matrix Grid */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '12px', background: 'white', border: '2px solid #e5e7eb', borderRight: '3px solid #667eea', fontWeight: '700', fontSize: '14px', color: '#111827', textAlign: 'left' }}>
+                          Size / Color
+                        </th>
+                        {product.colors.map((color, cidx) => (
+                          <th key={cidx} style={{ padding: '12px', background: '#667eea', color: 'white', border: '2px solid #667eea', fontWeight: '700', fontSize: '14px', textAlign: 'center', minWidth: '100px' }}>
+                            {color}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.sizes.map((size, sidx) => (
+                        <tr key={sidx}>
+                          <td style={{ padding: '12px', background: 'white', border: '2px solid #e5e7eb', borderRight: '3px solid #667eea', fontWeight: '700', fontSize: '14px', color: '#111827' }}>
+                            {size}
+                          </td>
+                          {product.colors.map((color, cidx) => {
+                            const key = `${color}|${size}`;
+                            const item = product.matrix[key];
+                            
+                            if (item) {
+                              return (
+                                <td key={cidx} style={{ padding: '12px', border: '2px solid #e5e7eb', textAlign: 'center', background: 'white' }}>
+                                  <div style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>
+                                    {item.quantity}
+                                  </div>
+                                </td>
+                              );
+                            } else {
+                              return (
+                                <td key={cidx} style={{ padding: '12px', border: '2px solid #e5e7eb', background: '#f3f4f6', textAlign: 'center' }}>
+                                  <div style={{ color: '#9ca3af', fontSize: '18px' }}>—</div>
+                                </td>
+                              );
+                            }
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Notes */}
+                {product.notes && (
+                  <div style={{ marginTop: '16px', padding: '12px', background: '#fef3c7', borderRadius: '8px', fontSize: '14px', color: '#92400e' }}>
+                    <span style={{ fontWeight: '700' }}>📝 Notes:</span> {product.notes}
+                  </div>
+                )}
               </div>
             ))}
 
-            {/* Total */}
+            {/* Grand Total */}
             <div style={{ marginTop: '24px', padding: '24px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ color: 'white', fontSize: '20px', fontWeight: '600' }}>Order Total</div>
-              <div style={{ color: 'white', fontSize: '32px', fontWeight: '700' }}>${totalAmount.toFixed(2)}</div>
+              <div style={{ color: 'white', fontSize: '32px', fontWeight: '700' }}>${grandTotal.toFixed(2)}</div>
             </div>
           </div>
         )}

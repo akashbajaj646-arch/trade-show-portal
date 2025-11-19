@@ -17,6 +17,8 @@ interface Portal {
 export default function AdminDashboard() {
   const [portals, setPortals] = useState<Portal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<any>(null);
 
   useEffect(() => {
     fetchPortals();
@@ -33,6 +35,42 @@ export default function AdminDashboard() {
       console.error('Error fetching portals:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function syncProducts() {
+    if (!confirm('This will sync all products from ApparelMagic. This may take 5-10 minutes. Continue?')) {
+      return;
+    }
+
+    setSyncing(true);
+    setSyncResult(null);
+
+    try {
+      const response = await fetch('/api/admin/sync-products', {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSyncResult({
+          success: true,
+          message: `✅ Sync complete! Products: ${data.stats.products}, Images: ${data.stats.images}, SKUs: ${data.stats.skus}, Duration: ${data.stats.duration}`
+        });
+      } else {
+        setSyncResult({
+          success: false,
+          message: `❌ Sync failed: ${data.error}`
+        });
+      }
+    } catch (error) {
+      setSyncResult({
+        success: false,
+        message: `❌ Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -100,15 +138,66 @@ export default function AdminDashboard() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#111827' }}>Trade Show Portal Manager</h1>
-          <a href="/admin/create" style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: '10px', textDecoration: 'none', fontWeight: '600', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }}>
-            ✨ Create New Portal
-          </a>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              onClick={syncProducts}
+              disabled={syncing}
+              style={{
+                padding: '12px 24px',
+                background: syncing ? '#9ca3af' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: '600',
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                boxShadow: syncing ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.4)'
+              }}
+            >
+              {syncing ? '🔄 Syncing Products...' : '🔄 Sync Products'}
+            </button>
+            <a href="/admin/create" style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: '10px', textDecoration: 'none', fontWeight: '600', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }}>
+              ✨ Create New Portal
+            </a>
+          </div>
         </div>
       </div>
 
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '40px' }}>
+        
+        {/* Sync Result */}
+        {syncResult && (
+          <div style={{ 
+            background: syncResult.success ? '#d1fae5' : '#fee2e2', 
+            border: `2px solid ${syncResult.success ? '#059669' : '#dc2626'}`,
+            borderRadius: '12px', 
+            padding: '20px', 
+            marginBottom: '24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div style={{ color: syncResult.success ? '#065f46' : '#991b1b', fontSize: '16px', fontWeight: '600' }}>
+              {syncResult.message}
+            </div>
+            <button
+              onClick={() => setSyncResult(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: syncResult.success ? '#065f46' : '#991b1b',
+                fontSize: '20px',
+                cursor: 'pointer',
+                fontWeight: '700'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {portals.length === 0 ? (
           <div style={{ background: 'white', borderRadius: '16px', padding: '60px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
             <div style={{ fontSize: '64px', marginBottom: '24px' }}>📋</div>

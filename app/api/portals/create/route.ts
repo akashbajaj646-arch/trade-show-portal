@@ -19,6 +19,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { customer, tradeShowName, items } = body;
 
+    console.log('=== CREATE PORTAL DEBUG ===');
+    console.log('Received items:', JSON.stringify(items, null, 2));
+
     // Generate unique link
     const uniqueLink = generateUniqueLink();
 
@@ -38,19 +41,29 @@ export async function POST(request: Request) {
 
     if (portalError) throw portalError;
 
-    // Create portal items - image_url is now passed from frontend
-    const portalItems = items.map((item: any) => ({
-      portal_id: portal.id,
-      product_id: item.product_id,
-      style_number: item.style_number,
-      attr_2: item.attr_2,
-      size: item.size,
-      quantity: item.quantity,
-      price: item.price,
-      delivery_date: item.deliveryDate || null,
-      notes: item.notes || null,
-      image_url: item.image_url || null
-    }));
+    // Create portal items - image_url is passed from frontend
+    const portalItems = items.map((item: any) => {
+      console.log('Processing item:', {
+        style_number: item.style_number,
+        image_url: item.image_url,
+        has_image_url: !!item.image_url
+      });
+      
+      return {
+        portal_id: portal.id,
+        product_id: item.product_id,
+        style_number: item.style_number,
+        attr_2: item.attr_2,
+        size: item.size,
+        quantity: item.quantity,
+        price: item.price,
+        delivery_date: item.deliveryDate || null,
+        notes: item.notes || null,
+        image_url: item.image_url || null
+      };
+    });
+
+    console.log('Inserting portal items:', JSON.stringify(portalItems, null, 2));
 
     const { error: itemsError } = await supabase
       .from('portal_items')
