@@ -1,618 +1,849 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-interface Product {
-  product_id: string;
-  style_number: string;
-  description: string;
-  price: string;
-  images: Array<{ img: string }>;
-  category: string;
+interface Customer {
+  id: string;
+  am_customer_id: string | null;
+  customer_name: string;
+  account_number: string | null;
+  email: string | null;
+  phone: string | null;
+  address_1: string | null;
+  address_2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  is_local_only: boolean;
 }
 
-interface SKU {
-  sku_id: string;
-  product_id: string;
-  style_number: string;
-  attr_2: string;
-  size: string;
-  price: string;
-  qty_avail_sell: string;
+interface Location {
+  id: string;
+  am_location_id: string | null;
+  location_name: string;
+  address_1: string | null;
+  address_2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  phone: string | null;
+  email: string | null;
+  is_main_location: boolean;
 }
 
-interface OrderItem {
-  sku: SKU;
-  product: Product;
-  quantity: number;
-  deliveryDate: string;
-  notes: string;
-}
-
-export default function CreatePortal() {
+export default function CreatePortalPage() {
+  // Customer selection state
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  
+  // Location selection state
+  const [customerLocations, setCustomerLocations] = useState<Location[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [useCustomAddress, setUseCustomAddress] = useState(false);
+  
+  // Form fields
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [address1, setAddress1] = useState('');
+  const [address2, setAddress2] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('USA');
   const [tradeShowName, setTradeShowName] = useState('');
+  const [notes, setNotes] = useState('');
   
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [totalResults, setTotalResults] = useState(0);
+  // Refs
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productSKUs, setProductSKUs] = useState<SKU[]>([]);
-  const [loadingSKUs, setLoadingSKUs] = useState(false);
-  
-  // Matrix state
-  const [matrixQuantities, setMatrixQuantities] = useState<Record<string, number>>({});
-  const [matrixDeliveryDate, setMatrixDeliveryDate] = useState('');
-  const [matrixNotes, setMatrixNotes] = useState('');
-  
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [creating, setCreating] = useState(false);
-  
-  const [portalCreated, setPortalCreated] = useState(false);
-  const [portalLink, setPortalLink] = useState('');
-  
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  
-  async function handleSearch() {
-    if (!searchQuery.trim()) return;
-    
-    setSearching(true);
-    try {
-      const response = await fetch(`/api/products/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await response.json();
-      if (data.success) {
-        setSearchResults(data.products);
-        setTotalResults(data.total || data.products.length);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
       }
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setSearching(false);
-    }
-  }
-  
-  async function browseAll() {
-    setSearching(true);
-    setSearchQuery('');
-    try {
-      const response = await fetch('/api/products/search?all=true');
-      const data = await response.json();
-      if (data.success) {
-        setSearchResults(data.products);
-        setTotalResults(data.total || data.products.length);
-      }
-    } catch (error) {
-      console.error('Browse error:', error);
-    } finally {
-      setSearching(false);
-    }
-  }
-  
-  async function selectProduct(product: Product) {
-    setSelectedProduct(product);
-    setLoadingSKUs(true);
-    setMatrixQuantities({});
-    setMatrixDeliveryDate('');
-    setMatrixNotes('');
-    
-    try {
-      const response = await fetch(`/api/products/skus?product_id=${product.product_id}`);
-      const data = await response.json();
-      if (data.success) {
-        setProductSKUs(data.skus);
-      }
-    } catch (error) {
-      console.error('Error loading SKUs:', error);
-    } finally {
-      setLoadingSKUs(false);
     }
     
-    setSearchResults([]);
-    setSearchQuery('');
-  }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
-  function updateMatrixQuantity(key: string, value: string) {
-    const qty = parseInt(value) || 0;
-    setMatrixQuantities({
-      ...matrixQuantities,
-      [key]: qty
-    });
-  }
-  
-  function addMatrixToPortal() {
-    if (!selectedProduct) return;
-    
-    const newItems: OrderItem[] = [];
-    
-    Object.keys(matrixQuantities).forEach(key => {
-      const qty = matrixQuantities[key];
-      if (qty > 0) {
-        const sku = productSKUs.find(s => `${s.attr_2}|${s.size}` === key);
-        if (sku) {
-          newItems.push({
-            sku,
-            product: selectedProduct,
-            quantity: qty,
-            deliveryDate: matrixDeliveryDate,
-            notes: matrixNotes
-          });
-        }
-      }
-    });
-    
-    if (newItems.length > 0) {
-      setOrderItems([...orderItems, ...newItems]);
-      closeVariantSelector();
-    } else {
-      alert('Please enter at least one quantity');
+  // Search customers with debounce
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
-  }
-  
-  function closeVariantSelector() {
-    setSelectedProduct(null);
-    setProductSKUs([]);
-    setMatrixQuantities({});
-    setMatrixDeliveryDate('');
-    setMatrixNotes('');
-  }
-  
-  function removeItem(index: number) {
-    setOrderItems(orderItems.filter((_, i) => i !== index));
-  }
-  
-  function updateItem(index: number, field: keyof OrderItem, value: any) {
-    const updated = [...orderItems];
-    updated[index] = { ...updated[index], [field]: value };
-    setOrderItems(updated);
-  }
-  
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
-    }
-  }
-  
-  function removeFile(index: number) {
-    setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
-  }
-  
-  async function createPortal() {
-    if (!customerName || orderItems.length === 0) {
-      alert('Please enter customer name and add at least one product variant');
+    
+    if (customerSearchQuery.length < 2) {
+      setCustomerResults([]);
+      setShowDropdown(false);
       return;
     }
     
-    setCreating(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}&limit=10`);
+        const data = await response.json();
+        
+        if (data.success) {
+          setCustomerResults(data.customers);
+          setShowDropdown(true);
+        }
+      } catch (error) {
+        console.error('Error searching customers:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [customerSearchQuery]);
+  
+  // Select existing customer from dropdown
+  async function selectCustomer(customer: Customer) {
+    setSelectedCustomer(customer);
+    setIsNewCustomer(false);
+    setUseCustomAddress(false);
+    
+    // Auto-fill customer info fields
+    setCustomerName(customer.customer_name || '');
+    setCustomerEmail(customer.email || '');
+    setCustomerPhone(customer.phone || '');
+    
+    // Clear address fields initially - will be filled by location selection
+    setAddress1('');
+    setAddress2('');
+    setCity('');
+    setState('');
+    setPostalCode('');
+    setCountry('USA');
+    
+    setCustomerSearchQuery('');
+    setShowDropdown(false);
+    
+    // Fetch locations for this customer
+    setLoadingLocations(true);
+    setCustomerLocations([]);
+    setSelectedLocation(null);
     
     try {
-      const itemsToSend = orderItems.map(item => {
-        const imageUrl = item.product.images?.[0]?.img || null;
-        
-        return {
-          product_id: item.product.product_id,
-          style_number: item.product.style_number,
-          attr_2: item.sku.attr_2,
-          size: item.sku.size,
-          price: item.sku.price,
-          quantity: item.quantity,
-          deliveryDate: item.deliveryDate,
-          notes: item.notes,
-          image_url: imageUrl
-        };
-      });
-      
-      const portalData = {
-        customer: {
-          name: customerName,
-          email: customerEmail,
-          phone: customerPhone
-        },
-        tradeShowName,
-        items: itemsToSend,
-        fileCount: uploadedFiles.length
-      };
-      
-      const response = await fetch('/api/portals/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(portalData)
-      });
-      
+      const response = await fetch(`/api/customers/locations?customer_id=${customer.id}`);
       const data = await response.json();
       
-      if (data.success) {
-        if (uploadedFiles.length > 0) {
-          await uploadFiles(data.portal.id);
-        }
+      if (data.success && data.locations.length > 0) {
+        setCustomerLocations(data.locations);
         
-        setPortalCreated(true);
-        setPortalLink(data.portal.url);
+        // Auto-select main location or first location
+        const mainLocation = data.locations.find((loc: Location) => loc.is_main_location);
+        const defaultLocation = mainLocation || data.locations[0];
+        
+        if (defaultLocation) {
+          selectLocation(defaultLocation);
+        }
       } else {
-        alert(`Error: ${data.error}`);
+        // No locations found - use customer's main address
+        setAddress1(customer.address_1 || '');
+        setAddress2(customer.address_2 || '');
+        setCity(customer.city || '');
+        setState(customer.state || '');
+        setPostalCode(customer.postal_code || '');
+        setCountry(customer.country || 'USA');
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to create portal');
+      console.error('Error fetching locations:', error);
+      // Fall back to customer's main address
+      setAddress1(customer.address_1 || '');
+      setAddress2(customer.address_2 || '');
+      setCity(customer.city || '');
+      setState(customer.state || '');
+      setPostalCode(customer.postal_code || '');
+      setCountry(customer.country || 'USA');
     } finally {
-      setCreating(false);
+      setLoadingLocations(false);
     }
   }
   
-  async function uploadFiles(portalId: string) {
-    for (const file of uploadedFiles) {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('portalId', portalId);
-      
-      try {
-        await fetch('/api/portals/upload', {
-          method: 'POST',
-          body: formData
-        });
-      } catch (error) {
-        console.error('Error uploading file:', error);
-      }
+  // Select a location and fill address fields
+  function selectLocation(location: Location) {
+    setSelectedLocation(location);
+    setUseCustomAddress(false);
+    setAddress1(location.address_1 || '');
+    setAddress2(location.address_2 || '');
+    setCity(location.city || '');
+    setState(location.state || '');
+    setPostalCode(location.postal_code || '');
+    setCountry(location.country || 'USA');
+  }
+  
+  // Switch to custom address entry
+  function enableCustomAddress() {
+    setSelectedLocation(null);
+    setUseCustomAddress(true);
+    setAddress1('');
+    setAddress2('');
+    setCity('');
+    setState('');
+    setPostalCode('');
+    setCountry('USA');
+  }
+  
+  // Create new customer mode
+  function startNewCustomer() {
+    setSelectedCustomer(null);
+    setIsNewCustomer(true);
+    setCustomerLocations([]);
+    setSelectedLocation(null);
+    setUseCustomAddress(true);
+    
+    // Use the search query as the initial customer name
+    setCustomerName(customerSearchQuery);
+    setCustomerEmail('');
+    setCustomerPhone('');
+    setAddress1('');
+    setAddress2('');
+    setCity('');
+    setState('');
+    setPostalCode('');
+    setCountry('USA');
+    
+    setCustomerSearchQuery('');
+    setShowDropdown(false);
+  }
+  
+  // Clear customer selection
+  function clearCustomerSelection() {
+    setSelectedCustomer(null);
+    setIsNewCustomer(false);
+    setCustomerLocations([]);
+    setSelectedLocation(null);
+    setUseCustomAddress(false);
+    setCustomerName('');
+    setCustomerEmail('');
+    setCustomerPhone('');
+    setAddress1('');
+    setAddress2('');
+    setCity('');
+    setState('');
+    setPostalCode('');
+    setCountry('USA');
+  }
+  
+  // Handle form submission
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    
+    if (!customerName.trim()) {
+      alert('Please enter a customer name');
+      return;
     }
-  }
-  
-  function copyLink() {
-    navigator.clipboard.writeText(portalLink);
-    alert('✓ Link copied to clipboard!');
-  }
-  
-  // Generate matrix data
-  const colors = [...new Set(productSKUs.map(sku => sku.attr_2))];
-  const sizes = [...new Set(productSKUs.map(sku => sku.size))];
-  
-  if (portalCreated) {
-    return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
-        <div style={{ maxWidth: '600px', width: '100%' }}>
-          <div style={{ background: 'white', padding: '48px', borderRadius: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', textAlign: 'center' }}>
-            <div style={{ fontSize: '72px', marginBottom: '24px' }}>🎉</div>
-            <h1 style={{ fontSize: '36px', marginBottom: '16px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: '700' }}>
-              Portal Created!
-            </h1>
-            <p style={{ fontSize: '18px', color: '#6b7280', marginBottom: '32px' }}>
-              Your customer portal is ready to share
-            </p>
-            
-            <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', marginBottom: '32px', wordBreak: 'break-all', border: '2px dashed #e5e7eb' }}>
-              <code style={{ fontSize: '15px', color: '#667eea', fontWeight: '600' }}>{portalLink}</code>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={copyLink} style={{ padding: '16px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '10px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)' }}>
-                📋 Copy Link
-              </button>
-              <a href={portalLink} target="_blank" style={{ padding: '16px', background: '#10b981', color: 'white', borderRadius: '10px', fontSize: '16px', fontWeight: '600', textDecoration: 'none', display: 'block', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }}>
-                👁️ View Portal
-              </a>
-              <a href="/admin" style={{ padding: '16px', background: '#6b7280', color: 'white', borderRadius: '10px', fontSize: '16px', fontWeight: '600', textDecoration: 'none', display: 'block' }}>
-                ← Back to Dashboard
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    
+    // TODO: Implement portal creation API call
+    alert('Portal creation coming soon! Customer: ' + customerName);
   }
   
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-      <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <a href="/admin" style={{ color: '#667eea', textDecoration: 'none', fontSize: '14px', fontWeight: '600' }}>← Back to Dashboard</a>
-            <h1 style={{ fontSize: '28px', fontWeight: '700', margin: '8px 0 0 0', color: '#111827' }}>Create New Portal</h1>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {orderItems.length > 0 && (
-              <div style={{ background: '#667eea', color: 'white', padding: '8px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: '600' }}>
-                {orderItems.length} Item{orderItems.length !== 1 ? 's' : ''}
+      {/* Header */}
+      <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827' }}>Create New Portal</h1>
+          <a href="/admin" style={{ padding: '10px 20px', background: '#6b7280', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600' }}>
+            ← Back to Dashboard
+          </a>
+        </div>
+      </div>
+      
+      {/* Form Container */}
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px' }}>
+        <form onSubmit={handleSubmit}>
+          {/* Customer Search Section */}
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              👤 Customer Information
+            </h2>
+            
+            {/* Customer Search / Selection */}
+            {!selectedCustomer && !isNewCustomer ? (
+              <div ref={searchRef} style={{ position: 'relative', marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                  Search Existing Customer
+                </label>
+                <input
+                  type="text"
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  placeholder="Type customer name to search..."
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    fontSize: '16px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '10px',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    boxSizing: 'border-box',
+                    color: '#000000',
+                    backgroundColor: '#ffffff'
+                  }}
+                  onFocus={() => customerSearchQuery.length >= 2 && setShowDropdown(true)}
+                />
+                
+                {/* Loading indicator */}
+                {isSearching && (
+                  <div style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}>
+                    Searching...
+                  </div>
+                )}
+                
+                {/* Dropdown Results */}
+                {showDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '2px solid #e5e7eb',
+                    borderTop: 'none',
+                    borderRadius: '0 0 10px 10px',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    zIndex: 100,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    {customerResults.length > 0 ? (
+                      <>
+                        {customerResults.map((customer) => (
+                          <div
+                            key={customer.id}
+                            onClick={() => selectCustomer(customer)}
+                            style={{
+                              padding: '14px 16px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #f3f4f6',
+                              transition: 'background 0.1s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                          >
+                            <div style={{ fontWeight: '600', color: '#111827' }}>{customer.customer_name}</div>
+                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                              {[customer.email, customer.phone, customer.city].filter(Boolean).join(' • ')}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div style={{ padding: '14px 16px', color: '#6b7280', textAlign: 'center' }}>
+                        No customers found for "{customerSearchQuery}"
+                      </div>
+                    )}
+                    
+                    {/* Create New Customer Option */}
+                    <div
+                      onClick={startNewCustomer}
+                      style={{
+                        padding: '14px 16px',
+                        cursor: 'pointer',
+                        background: '#f0fdf4',
+                        borderTop: '2px solid #10b981',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontWeight: '600',
+                        color: '#059669'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#dcfce7'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#f0fdf4'}
+                    >
+                      <span style={{ fontSize: '18px' }}>➕</span>
+                      Create New Customer{customerSearchQuery ? `: "${customerSearchQuery}"` : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Selected Customer or New Customer Mode */
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '16px',
+                  background: selectedCustomer ? '#eff6ff' : '#f0fdf4',
+                  border: `2px solid ${selectedCustomer ? '#3b82f6' : '#10b981'}`,
+                  borderRadius: '10px',
+                  marginBottom: '20px'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '16px' }}>
+                      {selectedCustomer ? '✓ Existing Customer Selected' : '✨ Creating New Customer'}
+                    </div>
+                    {selectedCustomer && (
+                      <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>
+                        {selectedCustomer.customer_name}
+                        {selectedCustomer.am_customer_id && ` (ID: ${selectedCustomer.am_customer_id})`}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearCustomerSelection}
+                    style={{
+                      padding: '8px 16px',
+                      background: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Customer Detail Fields */}
+            {(selectedCustomer || isNewCustomer) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {/* Customer Name */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Customer / Business Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '16px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      color: '#000000',
+                      backgroundColor: selectedCustomer ? '#f9fafb' : '#ffffff'
+                    }}
+                  />
+                </div>
+                
+                {/* Email */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="email@example.com"
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '16px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      color: '#000000',
+                      backgroundColor: '#ffffff'
+                    }}
+                  />
+                </div>
+                
+                {/* Phone */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '16px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      color: '#000000',
+                      backgroundColor: '#ffffff'
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px' }}>
-        
-        <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '24px', color: '#111827', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>👤</span> Customer Information
-          </h2>
           
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '14px' }}>Customer Name *</label>
-            <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Enter customer name" style={{ width: '100%', padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '16px', color: '#111827', transition: 'border-color 0.2s' }} onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'} onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'} />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '14px' }}>Email</label>
-              <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" style={{ width: '100%', padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '16px', color: '#111827' }} onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'} onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '14px' }}>Phone</label>
-              <input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="555-555-5555" style={{ width: '100%', padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '16px', color: '#111827' }} onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'} onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'} />
-            </div>
-          </div>
-
-          <div style={{ marginTop: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '14px' }}>Trade Show Name</label>
-            <input type="text" value={tradeShowName} onChange={(e) => setTradeShowName(e.target.value)} placeholder="e.g., Atlanta Apparel Market - January 2026" style={{ width: '100%', padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '16px', color: '#111827' }} onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'} onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'} />
-          </div>
-        </div>
-
-        <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '24px', color: '#111827', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>📦</span> Add Products
-          </h2>
-          
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-            <input 
-              type="text" 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)} 
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()} 
-              placeholder="Search by style number (e.g., 3160)" 
-              style={{ flex: 1, minWidth: '250px', padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '16px', color: '#111827' }} 
-            />
-            <button 
-              onClick={handleSearch} 
-              disabled={searching} 
-              style={{ padding: '12px 24px', background: searching ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: searching ? 'not-allowed' : 'pointer', fontSize: '15px', boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)' }}
-            >
-              {searching ? '🔍 Searching...' : '🔍 Search'}
-            </button>
-            <button 
-              onClick={browseAll} 
-              disabled={searching}
-              style={{ padding: '12px 24px', background: searching ? '#9ca3af' : '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: searching ? 'not-allowed' : 'pointer', fontSize: '15px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }}
-            >
-              📋 Browse All
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div>
-              <div style={{ marginBottom: '12px', fontSize: '14px', color: '#6b7280', fontWeight: '600' }}>
-                Showing {searchResults.length} products
-              </div>
-              <div style={{ border: '2px solid #e5e7eb', borderRadius: '12px', maxHeight: '500px', overflowY: 'auto', marginBottom: '24px' }}>
-                {searchResults.map((product) => (
-                  <div key={product.product_id} style={{ padding: '16px', borderBottom: '1px solid #f3f4f6', display: 'flex', gap: '16px', cursor: 'pointer', transition: 'background 0.2s' }} onClick={() => selectProduct(product)} onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseOut={(e) => e.currentTarget.style.background = 'white'}>
-                    {product.images && product.images[0] ? (
-                      <img src={product.images[0].img} alt={product.style_number} style={{ width: '70px', height: '70px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #e5e7eb' }} />
-                    ) : (
-                      <div style={{ width: '70px', height: '70px', background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>
-                        📦
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', fontSize: '16px', color: '#111827' }}>{product.style_number}</div>
-                      <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>{product.description || product.category || 'No description'}</div>
-                      <div style={{ fontSize: '16px', color: '#667eea', marginTop: '6px', fontWeight: '600' }}>${product.price}</div>
-                    </div>
-                    <button style={{ padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '14px', height: 'fit-content', alignSelf: 'center' }}>
-                      Select →
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {orderItems.length > 0 && (
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#111827' }}>Order Items ({orderItems.length})</h3>
-              {orderItems.map((item, index) => (
-                <div key={index} style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', marginBottom: '16px', border: '2px solid #e5e7eb' }}>
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                    {item.product.images && item.product.images[0] ? (
-                      <img src={item.product.images[0].img} alt={item.product.style_number} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px' }} />
-                    ) : (
-                      <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>
-                        📦
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', fontSize: '16px', color: '#111827' }}>{item.product.style_number}</div>
-                      <div style={{ color: '#6b7280', fontSize: '14px', marginTop: '4px' }}>
-                        {item.sku.attr_2} • {item.sku.size} • Qty: {item.quantity}
-                      </div>
-                      <div style={{ color: '#667eea', marginTop: '6px', fontWeight: '600' }}>${item.sku.price}/unit</div>
-                    </div>
-                    <button onClick={() => removeItem(index)} style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', height: 'fit-content', cursor: 'pointer', fontWeight: '600' }}>
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '12px', color: '#111827', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>📎</span> Upload Files
-          </h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '20px' }}>
-            Upload photos of paper orders, business cards, booth photos, etc.
-          </p>
-          
-          <input type="file" multiple accept="image/*,application/pdf" onChange={handleFileSelect} style={{ display: 'block', marginBottom: '16px', padding: '12px', border: '2px dashed #e5e7eb', borderRadius: '10px', width: '100%', cursor: 'pointer' }} />
-          
-          {uploadedFiles.length > 0 && (
-            <div>
-              <h4 style={{ fontSize: '16px', marginBottom: '12px', fontWeight: '700', color: '#111827' }}>Files Ready ({uploadedFiles.length})</h4>
-              {uploadedFiles.map((file, index) => (
-                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f9fafb', borderRadius: '8px', marginBottom: '8px', border: '1px solid #e5e7eb' }}>
-                  <div>
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#111827' }}>{file.name}</div>
-                    <div style={{ fontSize: '13px', color: '#6b7280' }}>{(file.size / 1024).toFixed(1)} KB</div>
-                  </div>
-                  <button onClick={() => removeFile(index)} style={{ padding: '6px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <button onClick={createPortal} disabled={!customerName || orderItems.length === 0 || creating} style={{ width: '100%', padding: '20px', background: (customerName && orderItems.length > 0 && !creating) ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#d1d5db', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: '700', cursor: (customerName && orderItems.length > 0 && !creating) ? 'pointer' : 'not-allowed', boxShadow: (customerName && orderItems.length > 0 && !creating) ? '0 8px 20px rgba(102, 126, 234, 0.4)' : 'none', transition: 'all 0.2s' }}>
-          {creating ? '⏳ Creating Portal...' : `✨ Create Portal with ${orderItems.length} Item${orderItems.length !== 1 ? 's' : ''}`}
-        </button>
-      </div>
-
-      {/* MATRIX VARIANT SELECTOR MODAL */}
-      {selectedProduct && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto' }}>
-          <div style={{ background: 'white', borderRadius: '16px', maxWidth: '900px', width: '100%', maxHeight: '90vh', overflow: 'auto', padding: '32px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)', margin: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '24px' }}>
-              <div>
-                <h3 style={{ fontSize: '26px', marginBottom: '6px', fontWeight: '700', color: '#111827' }}>Select Quantities</h3>
-                <p style={{ color: '#6b7280', fontSize: '15px' }}>Style: {selectedProduct.style_number} • ${productSKUs[0]?.price || selectedProduct.price}/unit</p>
-              </div>
-              <button onClick={closeVariantSelector} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}>
-                ✕ Close
-              </button>
-            </div>
-
-            {loadingSKUs ? (
-              <div style={{ textAlign: 'center', padding: '60px', color: '#6b7280' }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
-                <div>Loading variants...</div>
-              </div>
-            ) : productSKUs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px', color: '#6b7280' }}>No variants found</div>
-            ) : (
-              <>
-                {/* MATRIX GRID */}
-                <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '12px', background: '#f9fafb', border: '2px solid #e5e7eb', borderRight: '3px solid #667eea', fontWeight: '700', fontSize: '14px', color: '#111827', textAlign: 'left', position: 'sticky', left: 0, zIndex: 2 }}>
-                          Size / Color
-                        </th>
-                        {colors.map((color, idx) => (
-                          <th key={idx} style={{ padding: '12px', background: '#667eea', color: 'white', border: '2px solid #667eea', fontWeight: '700', fontSize: '14px', textAlign: 'center', minWidth: '100px' }}>
-                            {color}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sizes.map((size, sizeIdx) => (
-                        <tr key={sizeIdx}>
-                          <td style={{ padding: '12px', background: '#f9fafb', border: '2px solid #e5e7eb', borderRight: '3px solid #667eea', fontWeight: '700', fontSize: '14px', color: '#111827', position: 'sticky', left: 0, zIndex: 1 }}>
-                            {size}
-                          </td>
-                          {colors.map((color, colorIdx) => {
-                            const key = `${color}|${size}`;
-                            const sku = productSKUs.find(s => s.attr_2 === color && s.size === size);
-                            
-                            if (sku) {
-                              return (
-                                <td key={colorIdx} style={{ padding: '8px', border: '2px solid #e5e7eb', textAlign: 'center' }}>
-                                  <input 
-                                    type="number"
-                                    min="0"
-                                    value={matrixQuantities[key] || 0}
-                                    onChange={(e) => updateMatrixQuantity(key, e.target.value)}
-                                    style={{ 
-                                      width: '80px', 
-                                      padding: '8px', 
-                                      border: '2px solid #e5e7eb', 
-                                      borderRadius: '6px', 
-                                      fontSize: '16px', 
-                                      textAlign: 'center',
-                                      color: '#111827',
-                                      fontWeight: '600'
-                                    }}
-                                    onFocus={(e) => {
-                                      e.currentTarget.style.borderColor = '#667eea';
-                                      e.currentTarget.style.background = '#f0f4ff';
-                                    }}
-                                    onBlur={(e) => {
-                                      e.currentTarget.style.borderColor = '#e5e7eb';
-                                      e.currentTarget.style.background = 'white';
-                                    }}
-                                  />
-                                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                                    {sku.qty_avail_sell} avail
-                                  </div>
-                                </td>
-                              );
-                            } else {
-                              return (
-                                <td key={colorIdx} style={{ padding: '8px', border: '2px solid #e5e7eb', background: '#f3f4f6', textAlign: 'center' }}>
-                                  <div style={{ color: '#9ca3af', fontSize: '20px' }}>—</div>
-                                </td>
-                              );
-                            }
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* DELIVERY DATE AND NOTES */}
+          {/* Shipping Address Section */}
+          {(selectedCustomer || isNewCustomer) && (
+            <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                📦 Shipping Address
+              </h2>
+              
+              {/* Location Selector - Only show for existing customers with locations */}
+              {selectedCustomer && customerLocations.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '700', color: '#374151', fontSize: '14px' }}>Expected Delivery Date (applies to all variants)</label>
-                    <input 
-                      type="date" 
-                      value={matrixDeliveryDate} 
-                      onChange={(e) => setMatrixDeliveryDate(e.target.value)} 
-                      style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '16px', color: '#111827' }}
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Select Shipping Location
+                  </label>
+                  
+                  {loadingLocations ? (
+                    <div style={{ padding: '14px 16px', color: '#6b7280' }}>Loading locations...</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {customerLocations.map((location) => (
+                        <div
+                          key={location.id}
+                          onClick={() => selectLocation(location)}
+                          style={{
+                            padding: '14px 16px',
+                            border: `2px solid ${selectedLocation?.id === location.id ? '#3b82f6' : '#e5e7eb'}`,
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            background: selectedLocation?.id === location.id ? '#eff6ff' : '#ffffff',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                                {location.location_name}
+                                {location.is_main_location && (
+                                  <span style={{ marginLeft: '8px', fontSize: '12px', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '4px' }}>
+                                    Main
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                                {[location.address_1, location.city, location.state, location.postal_code].filter(Boolean).join(', ')}
+                              </div>
+                            </div>
+                            {selectedLocation?.id === location.id && (
+                              <div style={{ color: '#3b82f6', fontSize: '20px' }}>✓</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Option to enter custom address */}
+                      <div
+                        onClick={enableCustomAddress}
+                        style={{
+                          padding: '14px 16px',
+                          border: `2px solid ${useCustomAddress ? '#10b981' : '#e5e7eb'}`,
+                          borderRadius: '10px',
+                          cursor: 'pointer',
+                          background: useCustomAddress ? '#f0fdf4' : '#ffffff',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: '600', color: useCustomAddress ? '#059669' : '#111827' }}>
+                              ➕ Enter Different Address
+                            </div>
+                            <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                              Ship to a new address not listed above
+                            </div>
+                          </div>
+                          {useCustomAddress && (
+                            <div style={{ color: '#10b981', fontSize: '20px' }}>✓</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Address Fields - Always editable for new customers, or when custom address is selected */}
+              {(isNewCustomer || useCustomAddress || customerLocations.length === 0) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  {/* Address Line 1 */}
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      Address Line 1
+                    </label>
+                    <input
+                      type="text"
+                      value={address1}
+                      onChange={(e) => setAddress1(e.target.value)}
+                      placeholder="Street address"
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
                     />
                   </div>
                   
+                  {/* Address Line 2 */}
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      Address Line 2
+                    </label>
+                    <input
+                      type="text"
+                      value={address2}
+                      onChange={(e) => setAddress2(e.target.value)}
+                      placeholder="Suite, unit, building, floor, etc."
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* City */}
                   <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '700', color: '#374151', fontSize: '14px' }}>Notes (optional)</label>
-                    <textarea 
-                      value={matrixNotes} 
-                      onChange={(e) => setMatrixNotes(e.target.value)} 
-                      placeholder="Add any notes for these variants..."
-                      rows={3}
-                      style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '16px', color: '#111827', resize: 'vertical' }}
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="City"
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* State */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="State"
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Postal Code */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      Postal Code
+                    </label>
+                    <input
+                      type="text"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                      placeholder="ZIP / Postal code"
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Country */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="Country"
+                      style={{
+                        width: '100%',
+                        padding: '14px 16px',
+                        fontSize: '16px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '10px',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        color: '#000000',
+                        backgroundColor: '#ffffff'
+                      }}
                     />
                   </div>
                 </div>
-
-                {/* ADD BUTTON */}
-                <button 
-                  onClick={addMatrixToPortal}
-                  style={{ 
-                    width: '100%', 
-                    padding: '16px', 
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '10px', 
-                    fontSize: '18px', 
-                    fontWeight: '700', 
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
-                  }}
-                >
-                  ✓ Add to Portal
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+              )}
+              
+              {/* Show selected address summary when a location is selected */}
+              {selectedCustomer && selectedLocation && !useCustomAddress && (
+                <div style={{ 
+                  marginTop: '16px', 
+                  padding: '16px', 
+                  background: '#f9fafb', 
+                  borderRadius: '10px',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <div style={{ fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                    Shipping to: {selectedLocation.location_name}
+                  </div>
+                  <div style={{ color: '#6b7280', fontSize: '14px' }}>
+                    {address1 && <div>{address1}</div>}
+                    {address2 && <div>{address2}</div>}
+                    <div>{[city, state, postalCode].filter(Boolean).join(', ')}</div>
+                    {country && <div>{country}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Trade Show & Notes Section */}
+          {(selectedCustomer || isNewCustomer) && (
+            <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🎪 Trade Show Details
+              </h2>
+              
+              <div style={{ display: 'grid', gap: '20px' }}>
+                {/* Trade Show Name */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Trade Show Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tradeShowName}
+                    onChange={(e) => setTradeShowName(e.target.value)}
+                    placeholder="e.g., Magic Las Vegas 2025"
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '16px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      color: '#000000',
+                      backgroundColor: '#ffffff'
+                    }}
+                  />
+                </div>
+                
+                {/* Notes */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Notes
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Any special instructions or notes about this order..."
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      fontSize: '16px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                      color: '#000000',
+                      backgroundColor: '#ffffff'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Submit Button */}
+          {(selectedCustomer || isNewCustomer) && (
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                padding: '18px 32px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '18px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                transition: 'transform 0.1s, box-shadow 0.1s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+              }}
+            >
+              Continue to Add Products →
+            </button>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
