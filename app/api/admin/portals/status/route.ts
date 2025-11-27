@@ -1,23 +1,49 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const { portalId, status } = await request.json();
+    const body = await request.json();
+    const { portalId, status } = body;
     
-    const { error } = await supabase
+    if (!portalId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Portal ID is required'
+      }, { status: 400 });
+    }
+    
+    const validStatuses = ['pending', 'active', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
+      }, { status: 400 });
+    }
+    
+    const { data, error } = await supabase
       .from('portals')
       .update({ status })
-      .eq('id', portalId);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true });
+      .eq('id', portalId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error updating portal status:', error);
+      return NextResponse.json({
+        success: false,
+        error: error.message
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json({
+      success: true,
+      portal: data,
+      message: 'Status updated successfully'
+    });
+    
   } catch (error) {
+    console.error('Error in status update:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'

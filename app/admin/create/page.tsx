@@ -2,6 +2,23 @@
 
 import { useState, useEffect, useRef } from 'react';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ART DECO THEME - Trade Show Portal
+// Deep navy (#0d1b2a), Gold accents (#d4af37), Cream text (#f8f4e8)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const theme = {
+  navy: '#0d1b2a',
+  navyLight: '#1b2838',
+  gold: '#d4af37',
+  goldDim: '#b8962e',
+  cream: '#f8f4e8',
+  creamDim: 'rgba(248, 244, 232, 0.6)',
+  creamFaint: 'rgba(248, 244, 232, 0.15)',
+  success: '#2dd4bf',
+  error: '#f87171',
+};
+
 interface Customer {
   id: string;
   am_customer_id: string | null;
@@ -59,6 +76,7 @@ export default function CreatePortalPage() {
   const [postalCode, setPostalCode] = useState('');
   const [country, setCountry] = useState('USA');
   const [tradeShowName, setTradeShowName] = useState('');
+  const [shipDate, setShipDate] = useState('');
   const [notes, setNotes] = useState('');
   
   // Refs
@@ -119,12 +137,10 @@ export default function CreatePortalPage() {
     setIsNewCustomer(false);
     setUseCustomAddress(false);
     
-    // Auto-fill customer info fields
     setCustomerName(customer.customer_name || '');
     setCustomerEmail(customer.email || '');
     setCustomerPhone(customer.phone || '');
     
-    // Clear address fields initially - will be filled by location selection
     setAddress1('');
     setAddress2('');
     setCity('');
@@ -135,7 +151,6 @@ export default function CreatePortalPage() {
     setCustomerSearchQuery('');
     setShowDropdown(false);
     
-    // Fetch locations for this customer
     setLoadingLocations(true);
     setCustomerLocations([]);
     setSelectedLocation(null);
@@ -147,7 +162,6 @@ export default function CreatePortalPage() {
       if (data.success && data.locations.length > 0) {
         setCustomerLocations(data.locations);
         
-        // Auto-select main location or first location
         const mainLocation = data.locations.find((loc: Location) => loc.is_main_location);
         const defaultLocation = mainLocation || data.locations[0];
         
@@ -155,7 +169,6 @@ export default function CreatePortalPage() {
           selectLocation(defaultLocation);
         }
       } else {
-        // No locations found - use customer's main address
         setAddress1(customer.address_1 || '');
         setAddress2(customer.address_2 || '');
         setCity(customer.city || '');
@@ -165,7 +178,6 @@ export default function CreatePortalPage() {
       }
     } catch (error) {
       console.error('Error fetching locations:', error);
-      // Fall back to customer's main address
       setAddress1(customer.address_1 || '');
       setAddress2(customer.address_2 || '');
       setCity(customer.city || '');
@@ -177,7 +189,6 @@ export default function CreatePortalPage() {
     }
   }
   
-  // Select a location and fill address fields
   function selectLocation(location: Location) {
     setSelectedLocation(location);
     setUseCustomAddress(false);
@@ -189,7 +200,6 @@ export default function CreatePortalPage() {
     setCountry(location.country || 'USA');
   }
   
-  // Switch to custom address entry
   function enableCustomAddress() {
     setSelectedLocation(null);
     setUseCustomAddress(true);
@@ -201,7 +211,6 @@ export default function CreatePortalPage() {
     setCountry('USA');
   }
   
-  // Create new customer mode
   function startNewCustomer() {
     setSelectedCustomer(null);
     setIsNewCustomer(true);
@@ -209,7 +218,6 @@ export default function CreatePortalPage() {
     setSelectedLocation(null);
     setUseCustomAddress(true);
     
-    // Use the search query as the initial customer name
     setCustomerName(customerSearchQuery);
     setCustomerEmail('');
     setCustomerPhone('');
@@ -224,7 +232,6 @@ export default function CreatePortalPage() {
     setShowDropdown(false);
   }
   
-  // Clear customer selection
   function clearCustomerSelection() {
     setSelectedCustomer(null);
     setIsNewCustomer(false);
@@ -242,7 +249,8 @@ export default function CreatePortalPage() {
     setCountry('USA');
   }
   
-  // Handle form submission
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     
@@ -251,64 +259,244 @@ export default function CreatePortalPage() {
       return;
     }
     
-    // TODO: Implement portal creation API call
-    alert('Portal creation coming soon! Customer: ' + customerName);
-  }
-  
-  return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-      {/* Header */}
-      <div style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827' }}>Create New Portal</h1>
-          <a href="/admin" style={{ padding: '10px 20px', background: '#6b7280', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600' }}>
-            ← Back to Dashboard
-          </a>
-        </div>
-      </div>
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch('/api/portals/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer?.id || null,
+          customerName: customerName.trim(),
+          customerEmail: customerEmail || null,
+          customerPhone: customerPhone || null,
+          locationId: selectedLocation?.id || null,
+          locationName: selectedLocation?.location_name || null,
+          address1: address1 || null,
+          address2: address2 || null,
+          city: city || null,
+          state: state || null,
+          postalCode: postalCode || null,
+          country: country || 'USA',
+          tradeShowName: tradeShowName || null,
+          shipDate: shipDate || null,
+          notes: notes || null,
+          isNewCustomer: isNewCustomer,
+        }),
+      });
       
-      {/* Form Container */}
-      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px' }}>
+      const data = await response.json();
+      
+      if (data.success) {
+        // Redirect to admin dashboard with success message
+        window.location.href = `/admin?created=${data.portal.uniqueLink}`;
+      } else {
+        alert('Failed to create portal: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error creating portal:', error);
+      alert('Error creating portal. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STYLED INPUT COMPONENT
+  // ═══════════════════════════════════════════════════════════════════════════
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '16px 20px',
+    fontSize: '16px',
+    fontFamily: '"Cormorant Garamond", Georgia, serif',
+    background: 'rgba(248, 244, 232, 0.08)',
+    border: `1px solid ${theme.creamFaint}`,
+    borderRadius: '0',
+    color: theme.cream,
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'all 0.3s ease',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    marginBottom: '8px',
+    fontSize: '11px',
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    color: theme.gold,
+    fontFamily: '"Cormorant Garamond", Georgia, serif',
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: theme.navy,
+      fontFamily: '"Playfair Display", Georgia, serif',
+      color: theme.cream,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* ═══ GEOMETRIC BACKGROUND PATTERN ═══ */}
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundImage: `
+          linear-gradient(30deg, ${theme.navy} 12%, transparent 12.5%, transparent 87%, ${theme.navy} 87.5%),
+          linear-gradient(150deg, ${theme.navy} 12%, transparent 12.5%, transparent 87%, ${theme.navy} 87.5%),
+          linear-gradient(30deg, ${theme.navy} 12%, transparent 12.5%, transparent 87%, ${theme.navy} 87.5%),
+          linear-gradient(150deg, ${theme.navy} 12%, transparent 12.5%, transparent 87%, ${theme.navy} 87.5%),
+          linear-gradient(60deg, rgba(212,175,55,0.03) 25%, transparent 25.5%, transparent 75%, rgba(212,175,55,0.03) 75%),
+          linear-gradient(60deg, rgba(212,175,55,0.03) 25%, transparent 25.5%, transparent 75%, rgba(212,175,55,0.03) 75%)
+        `,
+        backgroundSize: '80px 140px',
+        backgroundPosition: '0 0, 0 0, 40px 70px, 40px 70px, 0 0, 40px 70px',
+        opacity: 0.6,
+        pointerEvents: 'none',
+      }} />
+
+      {/* ═══ TOP ORNAMENTAL BORDER ═══ */}
+      <div style={{
+        height: '4px',
+        background: `linear-gradient(90deg, transparent, ${theme.gold}, transparent)`,
+      }} />
+
+      {/* ═══ HEADER ═══ */}
+      <header style={{
+        padding: '32px 48px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        position: 'relative',
+        zIndex: 10,
+        borderBottom: `1px solid ${theme.creamFaint}`,
+      }}>
+        <div>
+          <div style={{
+            fontSize: '10px',
+            letterSpacing: '5px',
+            color: theme.gold,
+            marginBottom: '8px',
+          }}>
+            ✦ ADVANCE APPARELS ✦
+          </div>
+          <h1 style={{
+            fontSize: '28px',
+            fontWeight: '400',
+            margin: 0,
+            fontStyle: 'italic',
+            letterSpacing: '1px',
+          }}>
+            New Portal
+          </h1>
+        </div>
+
+        {/* Decorative divider */}
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: '-1px',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          background: theme.navy,
+          padding: '0 24px',
+        }}>
+          <div style={{ width: '40px', height: '1px', background: theme.gold }} />
+          <div style={{
+            width: '8px',
+            height: '8px',
+            border: `1px solid ${theme.gold}`,
+            transform: 'rotate(45deg)',
+            margin: '0 12px',
+          }} />
+          <div style={{ width: '40px', height: '1px', background: theme.gold }} />
+        </div>
+
+        <a
+          href="/admin"
+          style={{
+            background: 'transparent',
+            border: `1px solid ${theme.gold}`,
+            color: theme.gold,
+            padding: '12px 24px',
+            fontSize: '11px',
+            letterSpacing: '2px',
+            textDecoration: 'none',
+            fontFamily: '"Cormorant Garamond", Georgia, serif',
+            transition: 'all 0.3s ease',
+          }}
+        >
+          ← RETURN
+        </a>
+      </header>
+
+      {/* ═══ MAIN CONTENT ═══ */}
+      <main style={{
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: '60px 40px',
+        position: 'relative',
+        zIndex: 10,
+      }}>
         <form onSubmit={handleSubmit}>
-          {/* Customer Search Section */}
-          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              👤 Customer Information
-            </h2>
-            
-            {/* Customer Search / Selection */}
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION I: CUSTOMER
+          ═══════════════════════════════════════════════════════════════════ */}
+          <section style={{ marginBottom: '60px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <div style={{
+                fontSize: '10px',
+                letterSpacing: '4px',
+                color: theme.gold,
+                marginBottom: '16px',
+              }}>— I —</div>
+              <div style={{
+                fontSize: '12px',
+                letterSpacing: '3px',
+                opacity: 0.6,
+                textTransform: 'uppercase',
+              }}>Customer</div>
+            </div>
+
+            {/* Customer Search */}
             {!selectedCustomer && !isNewCustomer ? (
-              <div ref={searchRef} style={{ position: 'relative', marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                  Search Existing Customer
-                </label>
+              <div ref={searchRef} style={{ position: 'relative' }}>
                 <input
                   type="text"
                   value={customerSearchQuery}
                   onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                  placeholder="Type customer name to search..."
+                  placeholder="Search customer name..."
                   style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    fontSize: '16px',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '10px',
-                    outline: 'none',
-                    transition: 'border-color 0.2s',
-                    boxSizing: 'border-box',
-                    color: '#000000',
-                    backgroundColor: '#ffffff'
+                    ...inputStyle,
+                    fontSize: '20px',
+                    fontStyle: 'italic',
+                    textAlign: 'center',
+                    padding: '20px',
+                    border: `1px solid ${theme.creamFaint}`,
+                    borderBottom: customerSearchQuery ? `1px solid ${theme.gold}` : `1px solid ${theme.creamFaint}`,
                   }}
                   onFocus={() => customerSearchQuery.length >= 2 && setShowDropdown(true)}
                 />
-                
-                {/* Loading indicator */}
+
                 {isSearching && (
-                  <div style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}>
+                  <div style={{
+                    position: 'absolute',
+                    right: '20px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: theme.creamDim,
+                    fontSize: '12px',
+                    letterSpacing: '1px',
+                  }}>
                     Searching...
                   </div>
                 )}
-                
+
                 {/* Dropdown Results */}
                 {showDropdown && (
                   <div style={{
@@ -316,433 +504,376 @@ export default function CreatePortalPage() {
                     top: '100%',
                     left: 0,
                     right: 0,
-                    background: 'white',
-                    border: '2px solid #e5e7eb',
+                    background: theme.navyLight,
+                    border: `1px solid ${theme.creamFaint}`,
                     borderTop: 'none',
-                    borderRadius: '0 0 10px 10px',
-                    maxHeight: '300px',
+                    maxHeight: '320px',
                     overflowY: 'auto',
                     zIndex: 100,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                   }}>
                     {customerResults.length > 0 ? (
-                      <>
-                        {customerResults.map((customer) => (
-                          <div
-                            key={customer.id}
-                            onClick={() => selectCustomer(customer)}
-                            style={{
-                              padding: '14px 16px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #f3f4f6',
-                              transition: 'background 0.1s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                          >
-                            <div style={{ fontWeight: '600', color: '#111827' }}>{customer.customer_name}</div>
-                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                              {[customer.email, customer.phone, customer.city].filter(Boolean).join(' • ')}
-                            </div>
+                      customerResults.map((customer) => (
+                        <div
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          style={{
+                            padding: '16px 20px',
+                            cursor: 'pointer',
+                            borderBottom: `1px solid ${theme.creamFaint}`,
+                            transition: 'background 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212,175,55,0.1)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <div style={{ fontSize: '16px', fontStyle: 'italic', marginBottom: '4px' }}>
+                            {customer.customer_name}
                           </div>
-                        ))}
-                      </>
+                          <div style={{ fontSize: '12px', color: theme.creamDim }}>
+                            {[customer.email, customer.city].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      ))
                     ) : (
-                      <div style={{ padding: '14px 16px', color: '#6b7280', textAlign: 'center' }}>
-                        No customers found for "{customerSearchQuery}"
+                      <div style={{ padding: '16px 20px', color: theme.creamDim, textAlign: 'center', fontStyle: 'italic' }}>
+                        No customers found
                       </div>
                     )}
-                    
-                    {/* Create New Customer Option */}
+
+                    {/* Create New Option */}
                     <div
                       onClick={startNewCustomer}
                       style={{
-                        padding: '14px 16px',
+                        padding: '16px 20px',
                         cursor: 'pointer',
-                        background: '#f0fdf4',
-                        borderTop: '2px solid #10b981',
+                        background: `rgba(212,175,55,0.15)`,
+                        borderTop: `2px solid ${theme.gold}`,
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         gap: '8px',
-                        fontWeight: '600',
-                        color: '#059669'
+                        color: theme.gold,
+                        fontStyle: 'italic',
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#dcfce7'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#f0fdf4'}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212,175,55,0.25)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(212,175,55,0.15)'}
                     >
-                      <span style={{ fontSize: '18px' }}>➕</span>
-                      Create New Customer{customerSearchQuery ? `: "${customerSearchQuery}"` : ''}
+                      <span>+</span>
+                      <span>Create New Customer{customerSearchQuery ? `: "${customerSearchQuery}"` : ''}</span>
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              /* Selected Customer or New Customer Mode */
-              <div style={{ marginBottom: '20px' }}>
+              /* Selected Customer Display */
+              <div>
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '16px',
-                  background: selectedCustomer ? '#eff6ff' : '#f0fdf4',
-                  border: `2px solid ${selectedCustomer ? '#3b82f6' : '#10b981'}`,
-                  borderRadius: '10px',
-                  marginBottom: '20px'
+                  padding: '24px',
+                  background: selectedCustomer ? 'rgba(212,175,55,0.1)' : 'rgba(45, 212, 191, 0.1)',
+                  border: `1px solid ${selectedCustomer ? theme.gold : theme.success}`,
+                  marginBottom: '32px',
                 }}>
                   <div>
-                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '16px' }}>
-                      {selectedCustomer ? '✓ Existing Customer Selected' : '✨ Creating New Customer'}
+                    <div style={{
+                      fontSize: '10px',
+                      letterSpacing: '2px',
+                      color: selectedCustomer ? theme.gold : theme.success,
+                      marginBottom: '8px',
+                      textTransform: 'uppercase',
+                    }}>
+                      {selectedCustomer ? '✓ Customer Selected' : '✦ New Customer'}
                     </div>
-                    {selectedCustomer && (
-                      <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>
-                        {selectedCustomer.customer_name}
-                        {selectedCustomer.am_customer_id && ` (ID: ${selectedCustomer.am_customer_id})`}
-                      </div>
-                    )}
+                    <div style={{ fontSize: '22px', fontStyle: 'italic' }}>
+                      {selectedCustomer?.customer_name || customerName || 'Unnamed'}
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={clearCustomerSelection}
                     style={{
-                      padding: '8px 16px',
-                      background: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: '600',
+                      background: 'transparent',
+                      border: `1px solid ${theme.creamFaint}`,
+                      color: theme.cream,
+                      padding: '10px 20px',
+                      fontSize: '11px',
+                      letterSpacing: '1px',
                       cursor: 'pointer',
-                      fontSize: '14px'
+                      fontFamily: 'inherit',
+                      transition: 'all 0.2s',
                     }}
                   >
-                    Change
+                    CHANGE
                   </button>
                 </div>
-              </div>
-            )}
-            
-            {/* Customer Detail Fields */}
-            {(selectedCustomer || isNewCustomer) && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {/* Customer Name */}
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Customer / Business Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      fontSize: '16px',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '10px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      color: '#000000',
-                      backgroundColor: selectedCustomer ? '#f9fafb' : '#ffffff'
-                    }}
-                  />
-                </div>
-                
-                {/* Email */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder="email@example.com"
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      fontSize: '16px',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '10px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      color: '#000000',
-                      backgroundColor: '#ffffff'
-                    }}
-                  />
-                </div>
-                
-                {/* Phone */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="(555) 123-4567"
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      fontSize: '16px',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '10px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      color: '#000000',
-                      backgroundColor: '#ffffff'
-                    }}
-                  />
+
+                {/* Customer Detail Fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+                  <div>
+                    <label style={labelStyle}>Business Name *</label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <div>
+                      <label style={labelStyle}>Email</label>
+                      <input
+                        type="email"
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                        placeholder="email@example.com"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Phone</label>
+                      <input
+                        type="tel"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="(555) 123-4567"
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
-          </div>
-          
-          {/* Shipping Address Section */}
+          </section>
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION II: SHIPPING DESTINATION
+          ═══════════════════════════════════════════════════════════════════ */}
           {(selectedCustomer || isNewCustomer) && (
-            <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📦 Shipping Address
-              </h2>
-              
-              {/* Location Selector - Only show for existing customers with locations */}
+            <section style={{ marginBottom: '60px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                <div style={{
+                  fontSize: '10px',
+                  letterSpacing: '4px',
+                  color: theme.gold,
+                  marginBottom: '16px',
+                }}>— II —</div>
+                <div style={{
+                  fontSize: '12px',
+                  letterSpacing: '3px',
+                  opacity: 0.6,
+                  textTransform: 'uppercase',
+                }}>Shipping Destination</div>
+              </div>
+
+              {/* Location Selector */}
               {selectedCustomer && customerLocations.length > 0 && (
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Select Shipping Location
-                  </label>
-                  
+                <div style={{ marginBottom: '32px' }}>
                   {loadingLocations ? (
-                    <div style={{ padding: '14px 16px', color: '#6b7280' }}>Loading locations...</div>
+                    <div style={{ textAlign: 'center', padding: '24px', color: theme.creamDim, fontStyle: 'italic' }}>
+                      Loading locations...
+                    </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {customerLocations.map((location) => (
                         <div
                           key={location.id}
                           onClick={() => selectLocation(location)}
                           style={{
-                            padding: '14px 16px',
-                            border: `2px solid ${selectedLocation?.id === location.id ? '#3b82f6' : '#e5e7eb'}`,
-                            borderRadius: '10px',
+                            padding: '20px 24px',
+                            background: selectedLocation?.id === location.id
+                              ? 'rgba(212,175,55,0.12)'
+                              : 'rgba(248, 244, 232, 0.03)',
+                            border: `1px solid ${selectedLocation?.id === location.id ? theme.gold : theme.creamFaint}`,
                             cursor: 'pointer',
-                            background: selectedLocation?.id === location.id ? '#eff6ff' : '#ffffff',
-                            transition: 'all 0.15s'
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                          <div>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              marginBottom: '6px',
+                            }}>
+                              <span style={{ fontSize: '18px', fontStyle: 'italic' }}>
                                 {location.location_name}
-                                {location.is_main_location && (
-                                  <span style={{ marginLeft: '8px', fontSize: '12px', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '4px' }}>
-                                    Main
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                                {[location.address_1, location.city, location.state, location.postal_code].filter(Boolean).join(', ')}
-                              </div>
+                              </span>
+                              {location.is_main_location && (
+                                <span style={{
+                                  fontSize: '9px',
+                                  letterSpacing: '1px',
+                                  color: theme.gold,
+                                  border: `1px solid ${theme.gold}`,
+                                  padding: '3px 8px',
+                                  textTransform: 'uppercase',
+                                }}>Primary</span>
+                              )}
                             </div>
+                            <div style={{ fontSize: '13px', color: theme.creamDim }}>
+                              {[location.address_1, location.city, location.state, location.postal_code]
+                                .filter(Boolean).join(', ')}
+                            </div>
+                          </div>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            border: `1px solid ${selectedLocation?.id === location.id ? theme.gold : theme.creamFaint}`,
+                            transform: 'rotate(45deg)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: selectedLocation?.id === location.id ? theme.gold : 'transparent',
+                            transition: 'all 0.2s',
+                          }}>
                             {selectedLocation?.id === location.id && (
-                              <div style={{ color: '#3b82f6', fontSize: '20px' }}>✓</div>
+                              <span style={{
+                                transform: 'rotate(-45deg)',
+                                color: theme.navy,
+                                fontSize: '12px',
+                              }}>✓</span>
                             )}
                           </div>
                         </div>
                       ))}
-                      
-                      {/* Option to enter custom address */}
+
+                      {/* Custom Address Option */}
                       <div
                         onClick={enableCustomAddress}
                         style={{
-                          padding: '14px 16px',
-                          border: `2px solid ${useCustomAddress ? '#10b981' : '#e5e7eb'}`,
-                          borderRadius: '10px',
+                          padding: '20px 24px',
+                          background: useCustomAddress ? 'rgba(45, 212, 191, 0.1)' : 'transparent',
+                          border: `1px dashed ${useCustomAddress ? theme.success : theme.creamFaint}`,
                           cursor: 'pointer',
-                          background: useCustomAddress ? '#f0fdf4' : '#ffffff',
-                          transition: 'all 0.15s'
+                          transition: 'all 0.3s ease',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontWeight: '600', color: useCustomAddress ? '#059669' : '#111827' }}>
-                              ➕ Enter Different Address
-                            </div>
-                            <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                              Ship to a new address not listed above
-                            </div>
+                        <div>
+                          <div style={{
+                            fontSize: '16px',
+                            fontStyle: 'italic',
+                            color: useCustomAddress ? theme.success : theme.cream,
+                          }}>
+                            + Enter Different Address
                           </div>
-                          {useCustomAddress && (
-                            <div style={{ color: '#10b981', fontSize: '20px' }}>✓</div>
-                          )}
+                          <div style={{ fontSize: '12px', color: theme.creamDim, marginTop: '4px' }}>
+                            Ship to a location not listed above
+                          </div>
                         </div>
+                        {useCustomAddress && (
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            border: `1px solid ${theme.success}`,
+                            transform: 'rotate(45deg)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: theme.success,
+                          }}>
+                            <span style={{
+                              transform: 'rotate(-45deg)',
+                              color: theme.navy,
+                              fontSize: '12px',
+                            }}>✓</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
               )}
-              
-              {/* Address Fields - Always editable for new customers, or when custom address is selected */}
+
+              {/* Address Fields */}
               {(isNewCustomer || useCustomAddress || customerLocations.length === 0) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                  {/* Address Line 1 */}
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      Address Line 1
-                    </label>
+                <div style={{ display: 'grid', gap: '24px' }}>
+                  <div>
+                    <label style={labelStyle}>Address Line 1</label>
                     <input
                       type="text"
                       value={address1}
                       onChange={(e) => setAddress1(e.target.value)}
                       placeholder="Street address"
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
+                      style={inputStyle}
                     />
                   </div>
-                  
-                  {/* Address Line 2 */}
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      Address Line 2
-                    </label>
+                  <div>
+                    <label style={labelStyle}>Address Line 2</label>
                     <input
                       type="text"
                       value={address2}
                       onChange={(e) => setAddress2(e.target.value)}
-                      placeholder="Suite, unit, building, floor, etc."
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
+                      placeholder="Suite, unit, building..."
+                      style={inputStyle}
                     />
                   </div>
-                  
-                  {/* City */}
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="City"
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
-                    />
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={labelStyle}>City</label>
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>State</label>
+                      <input
+                        type="text"
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Postal Code</label>
+                      <input
+                        type="text"
+                        value={postalCode}
+                        onChange={(e) => setPostalCode(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
                   </div>
-                  
-                  {/* State */}
                   <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      State
-                    </label>
-                    <input
-                      type="text"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                      placeholder="State"
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Postal Code */}
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      Postal Code
-                    </label>
-                    <input
-                      type="text"
-                      value={postalCode}
-                      onChange={(e) => setPostalCode(e.target.value)}
-                      placeholder="ZIP / Postal code"
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Country */}
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                      Country
-                    </label>
+                    <label style={labelStyle}>Country</label>
                     <input
                       type="text"
                       value={country}
                       onChange={(e) => setCountry(e.target.value)}
-                      placeholder="Country"
-                      style={{
-                        width: '100%',
-                        padding: '14px 16px',
-                        fontSize: '16px',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: '10px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        color: '#000000',
-                        backgroundColor: '#ffffff'
-                      }}
+                      style={inputStyle}
                     />
                   </div>
                 </div>
               )}
-              
-              {/* Show selected address summary when a location is selected */}
+
+              {/* Selected Address Summary */}
               {selectedCustomer && selectedLocation && !useCustomAddress && (
-                <div style={{ 
-                  marginTop: '16px', 
-                  padding: '16px', 
-                  background: '#f9fafb', 
-                  borderRadius: '10px',
-                  border: '1px solid #e5e7eb'
+                <div style={{
+                  marginTop: '24px',
+                  padding: '20px 24px',
+                  background: 'rgba(212,175,55,0.08)',
+                  border: `1px solid ${theme.creamFaint}`,
                 }}>
-                  <div style={{ fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
-                    Shipping to: {selectedLocation.location_name}
+                  <div style={{
+                    fontSize: '10px',
+                    letterSpacing: '2px',
+                    color: theme.gold,
+                    marginBottom: '8px',
+                    textTransform: 'uppercase',
+                  }}>
+                    Shipping To: {selectedLocation.location_name}
                   </div>
-                  <div style={{ color: '#6b7280', fontSize: '14px' }}>
+                  <div style={{ fontSize: '14px', color: theme.creamDim, lineHeight: 1.6 }}>
                     {address1 && <div>{address1}</div>}
                     {address2 && <div>{address2}</div>}
                     <div>{[city, state, postalCode].filter(Boolean).join(', ')}</div>
@@ -750,100 +881,123 @@ export default function CreatePortalPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </section>
           )}
-          
-          {/* Trade Show & Notes Section */}
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECTION III: TRADE SHOW
+          ═══════════════════════════════════════════════════════════════════ */}
           {(selectedCustomer || isNewCustomer) && (
-            <div style={{ background: 'white', borderRadius: '16px', padding: '32px', marginBottom: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🎪 Trade Show Details
-              </h2>
-              
-              <div style={{ display: 'grid', gap: '20px' }}>
-                {/* Trade Show Name */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Trade Show Name
-                  </label>
-                  <input
-                    type="text"
-                    value={tradeShowName}
-                    onChange={(e) => setTradeShowName(e.target.value)}
-                    placeholder="e.g., Magic Las Vegas 2025"
-                    style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      fontSize: '16px',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '10px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      color: '#000000',
-                      backgroundColor: '#ffffff'
-                    }}
-                  />
+            <section style={{ marginBottom: '60px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                <div style={{
+                  fontSize: '10px',
+                  letterSpacing: '4px',
+                  color: theme.gold,
+                  marginBottom: '16px',
+                }}>— III —</div>
+                <div style={{
+                  fontSize: '12px',
+                  letterSpacing: '3px',
+                  opacity: 0.6,
+                  textTransform: 'uppercase',
+                }}>Trade Show</div>
+              </div>
+
+              <div style={{ display: 'grid', gap: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                  <div>
+                    <label style={labelStyle}>Event Name</label>
+                    <input
+                      type="text"
+                      value={tradeShowName}
+                      onChange={(e) => setTradeShowName(e.target.value)}
+                      placeholder="e.g., Magic Las Vegas 2025"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Requested Ship Date</label>
+                    <input
+                      type="date"
+                      value={shipDate}
+                      onChange={(e) => setShipDate(e.target.value)}
+                      style={{
+                        ...inputStyle,
+                        colorScheme: 'dark',
+                      }}
+                    />
+                  </div>
                 </div>
-                
-                {/* Notes */}
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
-                    Notes
-                  </label>
+                  <label style={labelStyle}>Notes</label>
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Any special instructions or notes about this order..."
+                    placeholder="Special instructions or notes..."
                     rows={4}
                     style={{
-                      width: '100%',
-                      padding: '14px 16px',
-                      fontSize: '16px',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '10px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
+                      ...inputStyle,
                       resize: 'vertical',
-                      color: '#000000',
-                      backgroundColor: '#ffffff'
+                      minHeight: '100px',
                     }}
                   />
                 </div>
               </div>
+            </section>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SUBMIT BUTTON
+          ═══════════════════════════════════════════════════════════════════ */}
+          {(selectedCustomer || isNewCustomer) && (
+            <div style={{ textAlign: 'center' }}>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                style={{
+                  padding: '20px 64px',
+                  background: isSubmitting ? theme.goldDim : theme.gold,
+                  border: 'none',
+                  color: theme.navy,
+                  fontSize: '13px',
+                  letterSpacing: '4px',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  fontFamily: '"Cormorant Garamond", Georgia, serif',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  transition: 'all 0.3s ease',
+                  boxShadow: isSubmitting ? 'none' : '0 4px 20px rgba(212, 175, 55, 0.3)',
+                  opacity: isSubmitting ? 0.7 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSubmitting) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 24px rgba(212, 175, 55, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = isSubmitting ? 'none' : '0 4px 20px rgba(212, 175, 55, 0.3)';
+                }}
+              >
+                {isSubmitting ? '◌ Creating Portal...' : 'Continue to Products →'}
+              </button>
             </div>
           )}
-          
-          {/* Submit Button */}
-          {(selectedCustomer || isNewCustomer) && (
-            <button
-              type="submit"
-              style={{
-                width: '100%',
-                padding: '18px 32px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '18px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                transition: 'transform 0.1s, box-shadow 0.1s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
-              }}
-            >
-              Continue to Add Products →
-            </button>
-          )}
         </form>
-      </div>
+      </main>
+
+      {/* ═══ BOTTOM ORNAMENTAL BORDER ═══ */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '4px',
+        background: `linear-gradient(90deg, transparent, ${theme.gold}, transparent)`,
+        zIndex: 100,
+      }} />
     </div>
   );
 }

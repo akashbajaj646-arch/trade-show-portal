@@ -1,52 +1,38 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { portalId } = await request.json();
+    const body = await request.json();
+    const { portalId } = body;
     
-    console.log('Deleting portal:', portalId);
+    if (!portalId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Portal ID is required'
+      }, { status: 400 });
+    }
     
-    // Delete portal items first (foreign key constraint)
-    const { error: itemsError } = await supabase
-      .from('portal_items')
-      .delete()
-      .eq('portal_id', portalId);
-      
-    if (itemsError) {
-      console.error('Error deleting items:', itemsError);
-    }
-
-    // Delete portal files
-    const { error: filesError } = await supabase
-      .from('portal_files')
-      .delete()
-      .eq('portal_id', portalId);
-      
-    if (filesError) {
-      console.error('Error deleting files:', filesError);
-    }
-
-    // Delete the portal
-    const { error: portalError } = await supabase
+    const { error } = await supabase
       .from('portals')
       .delete()
       .eq('id', portalId);
-
-    if (portalError) {
-      console.error('Error deleting portal:', portalError);
-      throw portalError;
+    
+    if (error) {
+      console.error('Error deleting portal:', error);
+      return NextResponse.json({
+        success: false,
+        error: error.message
+      }, { status: 500 });
     }
-
-    console.log('Portal deleted successfully');
-
-    return NextResponse.json({ success: true });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Portal deleted successfully'
+    });
+    
   } catch (error) {
-    console.error('Error in delete endpoint:', error);
+    console.error('Error in portal deletion:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'

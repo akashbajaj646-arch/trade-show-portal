@@ -1,86 +1,149 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+// Generate a unique link for the portal
 function generateUniqueLink(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 12; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { customer, tradeShowName, items } = body;
-
-    console.log('=== CREATE PORTAL DEBUG ===');
-    console.log('Received items:', JSON.stringify(items, null, 2));
-
+    
+    const {
+      customerId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      locationId,
+      locationName,
+      address1,
+      address2,
+      city,
+      state,
+      postalCode,
+      country,
+      tradeShowName,
+      shipDate,
+      notes,
+      isNewCustomer,
+    } = body;
+    
+    // Validate required fields
+    if (!customerName || customerName.trim() === '') {
+      return NextResponse.json({
+        success: false,
+        error: 'Customer name is required'
+      }, { status: 400 });
+    }
+    
     // Generate unique link
-    const uniqueLink = generateUniqueLink();
-
-    // Create portal
+    let uniqueLink = generateUniqueLink();
+    let attempts = 0;
+    
+    // Ensure unique link doesn't already exist
+    while (attempts < 5) {
+      const { data: existing } = await supabase
+        .from('portals')
+        .select('id')
+        .eq('unique_link', uniqueLink)
+        .single();
+      
+      if (!existing) break;
+      
+      uniqueLink = generateUniqueLink();
+      attempts++;
+    }
+    
+    // If creating a new customer, insert them first
+    let finalCustomerId = customerId;
+    
+    if (isNewCustomer && !customerId) {
+      const { data: newCustomer, error: customerError } = await supabase
+        .from('customers')
+        .insert({
+          customer_name: customerName.trim(),
+          email: customerEmail || null,
+          phone: customerPhone || null,
+          address_1: address1 || null,
+          address_2: address2 || null,
+          city: city || null,
+          state: state || null,
+          postal_code: postalCode || null,
+          country: country || 'USA',
+          is_local_only: true,
+          is_active: '1',
+        })
+        .select('id')
+        .single();
+      
+      if (customerError) {
+        console.error('Error creating customer:', customerError);
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to create customer: ' + customerError.message
+        }, { status: 500 });
+      }
+      
+      finalCustomerId = newCustomer?.id;
+    }
+    
+    // Create the portal
+    const portalData = {
+      unique_link: uniqueLink,
+      customer_id: finalCustomerId || null,
+      customer_name: customerName.trim(),
+      customer_email: customerEmail || null,
+      customer_phone: customerPhone || null,
+      location_id: locationId || null,
+      location_name: locationName || null,
+      shipping_address_1: address1 || null,
+      shipping_address_2: address2 || null,
+      shipping_city: city || null,
+      shipping_state: state || null,
+      shipping_postal_code: postalCode || null,
+      shipping_country: country || 'USA',
+      trade_show_name: tradeShowName || null,
+      ship_date: shipDate || null,
+      notes: notes || null,
+      status: 'active',
+      is_new_customer: isNewCustomer || false,
+    };
+    
     const { data: portal, error: portalError } = await supabase
       .from('portals')
-      .insert({
-        customer_name: customer.name,
-        customer_email: customer.email,
-        customer_phone: customer.phone,
-        trade_show_name: tradeShowName,
-        status: 'pending',
-        unique_link: uniqueLink
-      })
+      .insert(portalData)
       .select()
       .single();
-
-    if (portalError) throw portalError;
-
-    // Create portal items - image_url is passed from frontend
-    const portalItems = items.map((item: any) => {
-      console.log('Processing item:', {
-        style_number: item.style_number,
-        image_url: item.image_url,
-        has_image_url: !!item.image_url
-      });
-      
-      return {
-        portal_id: portal.id,
-        product_id: item.product_id,
-        style_number: item.style_number,
-        attr_2: item.attr_2,
-        size: item.size,
-        quantity: item.quantity,
-        price: item.price,
-        delivery_date: item.deliveryDate || null,
-        notes: item.notes || null,
-        image_url: item.image_url || null
-      };
-    });
-
-    console.log('Inserting portal items:', JSON.stringify(portalItems, null, 2));
-
-    const { error: itemsError } = await supabase
-      .from('portal_items')
-      .insert(portalItems);
-
-    if (itemsError) throw itemsError;
-
+    
+    if (portalError) {
+      console.error('Error creating portal:', portalError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to create portal: ' + portalError.message
+      }, { status: 500 });
+    }
+    
+    console.log(`Portal created: ${uniqueLink} for ${customerName}`);
+    
     return NextResponse.json({
       success: true,
       portal: {
         id: portal.id,
-        url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/portal/${uniqueLink}`
-      }
+        uniqueLink: portal.unique_link,
+        customerName: portal.customer_name,
+        status: portal.status,
+      },
+      message: 'Portal created successfully'
     });
-
+    
   } catch (error) {
-    console.error('Error creating portal:', error);
+    console.error('Error in portal creation:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
